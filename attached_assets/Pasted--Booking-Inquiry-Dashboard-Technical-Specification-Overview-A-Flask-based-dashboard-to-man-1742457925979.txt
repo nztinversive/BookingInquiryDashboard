@@ -1,0 +1,137 @@
+# Booking Inquiry Dashboard - Technical Specification
+
+## Overview
+A Flask-based dashboard to manage, view, and update booking inquiries extracted via email.
+
+---
+
+## Features
+1. **Dashboard Table View**
+2. **Search/Filter by Fields (status, date, client name, etc.)**
+3. **Full Detail View for Each Inquiry**
+4. **Status Indicators (Complete, Incomplete, Error)**
+5. **Manual Edit & Update Option**
+6. **Export Data to CSV**
+7. **Optional: Basic Authentication**
+
+---
+
+## Pages / Routes
+
+| Route         | Purpose                          | Details                                    |
+|--------------|----------------------------------|--------------------------------------------|
+| `/dashboard` | Main dashboard view              | Table showing all extracted inquiries      |
+| `/inquiry/<id>` | Detail view per inquiry       | Full details + edit option                 |
+| `/update/<id>` | POST route to update inquiry  | Form submission to update DB               |
+| `/export`     | Export inquiries to CSV         | Download button                            |
+| `/login`      | Basic authentication (optional) | Simple login using Flask-Login or sessions |
+
+---
+
+## Dashboard Table View (`/dashboard`)
+
+### Columns:
+- Inquiry ID
+- Date Received
+- Client Name
+- Email
+- Phone Number
+- Travel Dates (Start & End)
+- Trip Cost
+- Status (Complete, Incomplete, Error)
+- Actions (View/Edit)
+
+### Enhancements:
+- Pagination
+- Search bar (client name, status, email)
+- Filter dropdown (Status)
+
+### Tech Stack:
+- HTML + Jinja2 Templates
+- Bootstrap or Tailwind CSS
+- DataTables.js for pagination, search, filter
+
+---
+
+## Inquiry Detail View (`/inquiry/<id>`)
+- Display all extracted fields
+- Status dropdown (editable)
+- Edit button
+- Save/Submit button to update inquiry
+
+---
+
+## Edit & Update Functionality
+- Form pre-filled with inquiry data
+- Editable fields:
+  - First Name, Last Name
+  - Home Address
+  - Date of Birth
+  - Travel Dates (Start & End)
+  - Trip Cost
+  - Email, Phone Number
+  - Status (dropdown: Complete, Incomplete, Error)
+- Submit form to `/update/<id>`
+- Update database, redirect to dashboard
+
+---
+
+## Export Functionality
+- "Export to CSV" button
+- Route `/export` dumps DB contents to CSV file
+
+---
+
+## Optional: Basic Authentication
+- Use Flask-Login or session-based auth
+- Protect `/dashboard`, `/inquiry`, `/export` routes
+
+---
+
+## Backend Database Structure
+
+**SQLite Table: `inquiries`**
+
+| Field            | Type             | Notes                          |
+|------------------|------------------|-------------------------------|
+| id               | INTEGER PRIMARY KEY | Unique ID                    |
+| date_received    | TIMESTAMP        | Auto-filled                   |
+| first_name       | TEXT             |                               |
+| last_name        | TEXT             |                               |
+| address          | TEXT             |                               |
+| dob              | TEXT             |                               |
+| travel_start     | TEXT             |                               |
+| travel_end       | TEXT             |                               |
+| trip_cost        | REAL             |                               |
+| email            | TEXT             |                               |
+| phone            | TEXT             |                               |
+| status           | TEXT             | Complete, Incomplete, Error   |
+| raw_email_content| TEXT             | Optional, store original email|
+
+---
+
+## Dependencies
+
+```bash
+Flask
+Flask-SQLAlchemy (or sqlite3)
+Flask-WTF (optional, for forms)
+DataTables.js (frontend)
+Bootstrap/Tailwind CSS (frontend)
+```
+
+---
+
+## Deliverable Summary
+
+**Goal:** Build a Flask-based dashboard to display, edit, filter, and export booking inquiries.
+
+**Core Features:**
+- Inquiry table with pagination & search
+- Status indicators & filters
+- Inquiry detail + edit form
+- CSV export
+- Optional login protection
+
+**Stack:** Flask, SQLite, DataTables.js, Bootstrap/Tailwind, Jinja2 templates.
+
