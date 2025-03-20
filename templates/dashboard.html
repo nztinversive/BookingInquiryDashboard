@@ -1,0 +1,65 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard - Booking Inquiry System{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-dark">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2 class="mb-0">Booking Inquiries</h2>
+            <a href="{{ url_for('export') }}" class="btn btn-outline-info">
+                <i class="fas fa-file-export me-1"></i> Export to CSV
+            </a>
+        </div>
+    </div>
+    <div class="card-body">
+        <!-- Filters -->
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label for="statusFilter" class="form-label">Status Filter:</label>
+                    <select id="statusFilter" class="form-select">
+                        <option value="All">All Statuses</option>
+                        <option value="Complete" {% if status_filter == 'Complete' %}selected{% endif %}>Complete</option>
+                        <option value="Incomplete" {% if status_filter == 'Incomplete' %}selected{% endif %}>Incomplete</option>
+                        <option value="Error" {% if status_filter == 'Error' %}selected{% endif %}>Error</option>
+                    </select>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="form-group">
+                    <label for="searchBox" class="form-label">Search:</label>
+                    <input type="text" id="searchBox" class="form-control" placeholder="Search by name, email, phone..." 
+                           value="{{ search_query }}">
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Table -->
+        <div class="table-responsive">
+            <table id="inquiriesTable" class="table table-striped table-hover" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Date Received</th>
+                        <th>Client Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Travel Dates</th>
+                        <th>Trip Cost</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- DataTables will populate this -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}
