@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Booking Inquiry Dashboard{% endblock %}</title>
+    <!-- Google Fonts - Inter -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
     <!-- Bootstrap 5 from Replit CDN -->
     <link rel="stylesheet" href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css">
     <!-- DataTables CSS -->
@@ -15,34 +17,36 @@
     {% block head %}{% endblock %}
 </head>
 <body>
-    <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+    <!-- Modern Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark mb-4">
         <div class="container">
-            <a class="navbar-brand" href="{{ url_for('dashboard') }}">Booking Inquiry Dashboard</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" 
+            <a class="navbar-brand" href="{{ url_for('dashboard') }}">
+                <i class="fas fa-calendar-check me-2"></i>Booking Inquiry Dashboard
+            </a>
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" 
                     aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
                     {% if current_user.is_authenticated %}
-                    <li class="nav-item">
+                    <li class="nav-item mx-1">
                         <a class="nav-link" href="{{ url_for('dashboard') }}">
                             <i class="fas fa-table me-1"></i> Dashboard
                         </a>
                     </li>
-                    <li class="nav-item">
+                    <li class="nav-item mx-1">
                         <a class="nav-link" href="{{ url_for('export_csv') }}">
                             <i class="fas fa-file-export me-1"></i> Export CSV
                         </a>
                     </li>
-                    <li class="nav-item">
+                    <li class="nav-item mx-1">
                         <a class="nav-link" href="{{ url_for('logout') }}">
                             <i class="fas fa-sign-out-alt me-1"></i> Logout
                         </a>
                     </li>
                     {% else %}
-                    <li class="nav-item">
+                    <li class="nav-item mx-1">
                         <a class="nav-link" href="{{ url_for('login') }}">
                             <i class="fas fa-sign-in-alt me-1"></i> Login
                         </a>
@@ -53,13 +57,24 @@
         </div>
     </nav>
 
-    <!-- Flash Messages -->
+    <!-- Flash Messages with enhanced styling -->
     <div class="container">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                        {{ message }}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm border-0" role="alert">
+                        <div class="d-flex align-items-center">
+                            {% if category == 'success' %}
+                                <i class="fas fa-check-circle me-2"></i>
+                            {% elif category == 'danger' %}
+                                <i class="fas fa-exclamation-circle me-2"></i>
+                            {% elif category == 'warning' %}
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                            {% else %}
+                                <i class="fas fa-info-circle me-2"></i>
+                            {% endif %}
+                            {{ message }}
+                        </div>
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
                 {% endfor %}
@@ -72,10 +87,21 @@
         {% block content %}{% endblock %}
     </main>
 
-    <!-- Footer -->
-    <footer class="py-4 mt-5 bg-dark">
-        <div class="container text-center">
-            <p class="text-muted mb-0">Booking Inquiry Dashboard &copy; {% raw %}{{ new Date().getFullYear() }}{% endraw %}</p>
+    <!-- Modern Footer -->
+    <footer class="py-4 mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6 text-center text-md-start">
+                    <p class="mb-0">Booking Inquiry Dashboard &copy; <script>document.write(new Date().getFullYear())</script></p>
+                </div>
+                <div class="col-md-6 text-center text-md-end">
+                    <p class="mb-0">
+                        <i class="fas fa-code text-primary me-1"></i> with 
+                        <i class="fas fa-heart text-danger mx-1"></i> by 
+                        <span class="fw-bold">Your Company</span>
+                    </p>
+                </div>
+            </div>
         </div>
     </footer>
 

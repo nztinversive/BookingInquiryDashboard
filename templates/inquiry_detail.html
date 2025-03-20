@@ -3,126 +3,196 @@
 {% block title %}Inquiry Details - {{ inquiry.first_name }} {{ inquiry.last_name }}{% endblock %}
 
 {% block content %}
-<div class="card shadow-sm border-0">
-    <div class="card-header bg-dark">
-        <div class="d-flex justify-content-between align-items-center">
-            <h2 class="mb-0">Inquiry Details</h2>
-            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
-            </a>
-        </div>
-    </div>
-    <div class="card-body">
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <h4>Inquiry #{{ inquiry.id }}</h4>
-                <p class="text-muted">
-                    Received: {{ inquiry.date_received.strftime('%Y-%m-%d %H:%M') }}
-                </p>
-            </div>
-            <div class="col-md-6 text-md-end">
-                <span class="badge 
-                    {% if inquiry.status == 'Complete' %}bg-success
-                    {% elif inquiry.status == 'Error' %}bg-danger
-                    {% else %}bg-warning{% endif %} 
-                    p-2 fs-6">
-                    {{ inquiry.status }}
-                </span>
-            </div>
-        </div>
-        
-        <form action="{{ url_for('update_inquiry', inquiry_id=inquiry.id) }}" method="POST">
-            <div class="row">
-                <!-- Personal Information -->
-                <div class="col-md-6">
-                    <h5 class="border-bottom pb-2 mb-3">Personal Information</h5>
-                    
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="first_name" class="form-label">First Name</label>
-                            <input type="text" class="form-control" id="first_name" name="first_name" 
-                                   value="{{ inquiry.first_name or '' }}">
-                        </div>
-                        <div class="col-md-6">
-                            <label for="last_name" class="form-label">Last Name</label>
-                            <input type="text" class="form-control" id="last_name" name="last_name" 
-                                   value="{{ inquiry.last_name or '' }}">
-                        </div>
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow border-0 card-header-gradient">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="mb-0 d-flex align-items-center">
+                            <i class="fas fa-file-alt me-3 text-primary"></i>
+                            Inquiry Details
+                        </h2>
+                        <p class="text-secondary mb-0">Review and manage inquiry information</p>
                     </div>
-                    
-                    <div class="mb-3">
-                        <label for="address" class="form-label">Home Address</label>
-                        <textarea class="form-control" id="address" name="address" rows="3">{{ inquiry.address or '' }}</textarea>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="dob" class="form-label">Date of Birth</label>
-                        <input type="text" class="form-control" id="dob" name="dob" value="{{ inquiry.dob or '' }}">
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="email" class="form-label">Email</label>
-                        <input type="email" class="form-control" id="email" name="email" value="{{ inquiry.email or '' }}">
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="phone" class="form-label">Phone Number</label>
-                        <input type="text" class="form-control" id="phone" name="phone" value="{{ inquiry.phone or '' }}">
-                    </div>
+                    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i> Back to Dashboard
+                    </a>
                 </div>
-                
-                <!-- Trip Information -->
-                <div class="col-md-6">
-                    <h5 class="border-bottom pb-2 mb-3">Trip Information</h5>
-                    
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="travel_start" class="form-label">Travel Start Date</label>
-                            <input type="text" class="form-control" id="travel_start" name="travel_start" 
-                                   value="{{ inquiry.travel_start or '' }}">
-                        </div>
-                        <div class="col-md-6">
-                            <label for="travel_end" class="form-label">Travel End Date</label>
-                            <input type="text" class="form-control" id="travel_end" name="travel_end" 
-                                   value="{{ inquiry.travel_end or '' }}">
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="trip_cost" class="form-label">Trip Cost ($)</label>
-                        <input type="number" step="0.01" class="form-control" id="trip_cost" name="trip_cost" 
-                               value="{{ inquiry.trip_cost or '' }}">
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="status" class="form-label">Status</label>
-                        <select class="form-select" id="status" name="status">
-                            <option value="Complete" {% if inquiry.status == 'Complete' %}selected{% endif %}>Complete</option>
-                            <option value="Incomplete" {% if inquiry.status == 'Incomplete' %}selected{% endif %}>Incomplete</option>
-                            <option value="Error" {% if inquiry.status == 'Error' %}selected{% endif %}>Error</option>
-                        </select>
-                    </div>
-                    
-                    {% if inquiry.raw_email_content %}
-                    <div class="mb-3">
-                        <label class="form-label">Original Email Content</label>
-                        <div class="card">
-                            <div class="card-body bg-dark">
-                                <pre class="mb-0" style="white-space: pre-wrap;">{{ inquiry.raw_email_content }}</pre>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4 fade-in">
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center">
+                            <div class="me-3">
+                                <div class="avatar-initials rounded-circle">
+                                    {{ inquiry.first_name[0] if inquiry.first_name else "" }}{{ inquiry.last_name[0] if inquiry.last_name else "" }}
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="mb-1">Inquiry #{{ inquiry.id }}</h4>
+                                <p class="text-muted mb-0">
+                                    <i class="far fa-calendar-alt me-1"></i> Received: {{ inquiry.date_received.strftime('%Y-%m-%d %H:%M') }}
+                                </p>
                             </div>
                         </div>
                     </div>
-                    {% endif %}
+                    <div class="col-md-6 text-md-end">
+                        <span class="badge 
+                            {% if inquiry.status == 'Complete' %}bg-success
+                            {% elif inquiry.status == 'Error' %}bg-danger
+                            {% else %}bg-warning{% endif %} 
+                            p-2 fs-6">
+                            {% if inquiry.status == 'Complete' %}<i class="fas fa-check-circle me-1"></i>
+                            {% elif inquiry.status == 'Error' %}<i class="fas fa-exclamation-circle me-1"></i>
+                            {% else %}<i class="fas fa-clock me-1"></i>{% endif %}
+                            {{ inquiry.status }}
+                        </span>
+                    </div>
                 </div>
+                
+                <form action="{{ url_for('update_inquiry', inquiry_id=inquiry.id) }}" method="POST">
+                    <div class="row">
+                        <!-- Personal Information -->
+                        <div class="col-md-6 fade-in" style="animation-delay: 0.1s;">
+                            <div class="card mb-4 shadow-soft">
+                                <div class="card-header card-header-gradient">
+                                    <h5 class="mb-0 d-flex align-items-center">
+                                        <i class="fas fa-user-circle text-primary me-2"></i>
+                                        Personal Information
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="first_name" class="form-label">First Name</label>
+                                            <div class="input-group">
+                                                <span class="input-group-text"><i class="fas fa-user-alt"></i></span>
+                                                <input type="text" class="form-control" id="first_name" name="first_name" 
+                                                      value="{{ inquiry.first_name or '' }}">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="last_name" class="form-label">Last Name</label>
+                                            <div class="input-group">
+                                                <span class="input-group-text"><i class="fas fa-user-alt"></i></span>
+                                                <input type="text" class="form-control" id="last_name" name="last_name" 
+                                                      value="{{ inquiry.last_name or '' }}">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="address" class="form-label">Home Address</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="fas fa-home"></i></span>
+                                            <textarea class="form-control" id="address" name="address" rows="3">{{ inquiry.address or '' }}</textarea>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="dob" class="form-label">Date of Birth</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="fas fa-birthday-cake"></i></span>
+                                            <input type="text" class="form-control" id="dob" name="dob" value="{{ inquiry.dob or '' }}" placeholder="YYYY-MM-DD">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="email" class="form-label">Email</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+                                            <input type="email" class="form-control" id="email" name="email" value="{{ inquiry.email or '' }}">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="phone" class="form-label">Phone Number</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="fas fa-phone"></i></span>
+                                            <input type="text" class="form-control" id="phone" name="phone" value="{{ inquiry.phone or '' }}">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Trip Information -->
+                        <div class="col-md-6 fade-in" style="animation-delay: 0.3s;">
+                            <div class="card mb-4 shadow-soft">
+                                <div class="card-header card-header-gradient">
+                                    <h5 class="mb-0 d-flex align-items-center">
+                                        <i class="fas fa-plane text-primary me-2"></i>
+                                        Trip Information
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="travel_start" class="form-label">Travel Start Date</label>
+                                            <div class="input-group">
+                                                <span class="input-group-text"><i class="fas fa-calendar"></i></span>
+                                                <input type="text" class="form-control" id="travel_start" name="travel_start" 
+                                                      value="{{ inquiry.travel_start or '' }}" placeholder="YYYY-MM-DD">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="travel_end" class="form-label">Travel End Date</label>
+                                            <div class="input-group">
+                                                <span class="input-group-text"><i class="fas fa-calendar"></i></span>
+                                                <input type="text" class="form-control" id="travel_end" name="travel_end" 
+                                                      value="{{ inquiry.travel_end or '' }}" placeholder="YYYY-MM-DD">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="trip_cost" class="form-label">Trip Cost ($)</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="fas fa-dollar-sign"></i></span>
+                                            <input type="number" step="0.01" class="form-control" id="trip_cost" name="trip_cost" 
+                                                  value="{{ inquiry.trip_cost or '' }}">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="status" class="form-label">Status</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="fas fa-tasks"></i></span>
+                                            <select class="form-select" id="status" name="status">
+                                                <option value="Complete" {% if inquiry.status == 'Complete' %}selected{% endif %}>Complete</option>
+                                                <option value="Incomplete" {% if inquiry.status == 'Incomplete' %}selected{% endif %}>Incomplete</option>
+                                                <option value="Error" {% if inquiry.status == 'Error' %}selected{% endif %}>Error</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    {% if inquiry.raw_email_content %}
+                                    <div class="mb-3">
+                                        <label class="form-label">Original Email Content</label>
+                                        <div class="card border-0 shadow-soft">
+                                            <div class="card-body bg-dark p-3">
+                                                <pre class="mb-0" style="white-space: pre-wrap; max-height: 200px; overflow-y: auto;">{{ inquiry.raw_email_content }}</pre>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 d-flex justify-content-end fade-in" style="animation-delay: 0.5s;">
+                        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary me-2">
+                            <i class="fas fa-times me-2"></i> Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary px-4">
+                            <i class="fas fa-save me-2"></i> Save Changes
+                        </button>
+                    </div>
+                </form>
             </div>
-            
-            <div class="mt-4 d-flex justify-content-end">
-                <a href="{{ url_for('dashboard') }}" class="btn btn-secondary me-2">Cancel</a>
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save me-1"></i> Save Changes
-                </button>
-            </div>
-        </form>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -130,13 +200,55 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Add any validation or enhancement scripts here
+    // Add animation on load
+    document.querySelectorAll('.fade-in').forEach(function(el) {
+        el.style.opacity = '0';
+        setTimeout(() => {
+            el.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+            el.style.opacity = '1';
+            el.style.transform = 'translateY(0)';
+        }, 100);
+    });
     
-    // Example: alert before form submission with changes
+    // Form validation enhancement
     const form = document.querySelector('form');
     form.addEventListener('submit', function(e) {
-        // Optional validation can go here
+        const requiredFields = document.querySelectorAll('input[required]');
+        let isValid = true;
+        
+        requiredFields.forEach(field => {
+            if (!field.value.trim()) {
+                isValid = false;
+                field.classList.add('is-invalid');
+            } else {
+                field.classList.remove('is-invalid');
+                field.classList.add('is-valid');
+            }
+        });
+        
+        if (!isValid) {
+            e.preventDefault();
+            // Scroll to first invalid field
+            const firstInvalid = document.querySelector('.is-invalid');
+            if (firstInvalid) {
+                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                firstInvalid.focus();
+            }
+        }
     });
+    
+    // Format trip cost as currency
+    const tripCostInput = document.getElementById('trip_cost');
+    if (tripCostInput) {
+        tripCostInput.addEventListener('blur', function() {
+            if (this.value) {
+                const value = parseFloat(this.value);
+                if (!isNaN(value)) {
+                    this.value = value.toFixed(2);
+                }
+            }
+        });
+    }
 });
 </script>
 {% endblock %}

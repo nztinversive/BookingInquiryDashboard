@@ -1,58 +1,377 @@
-/* Additional styles to enhance Bootstrap */
+/* Modern UI styles for the Booking Inquiry Dashboard */
 
-/* Status badge styles */
+:root {
+    --primary-color: #6366f1;
+    --primary-hover: #4f46e5;
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+    --dark-bg: #111827;
+    --darker-bg: #0c111b;
+    --card-bg: #1e293b;
+    --card-header: #1e293b;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --border-color: #2d3748;
+    --input-bg: #1e293b;
+}
+
+body {
+    background-color: var(--dark-bg);
+    color: var(--text-primary);
+    font-family: 'Inter', 'Segoe UI', Roboto, sans-serif;
+    background-image: radial-gradient(circle at 50% 20%, rgba(100, 100, 255, 0.05), transparent 25%);
+}
+
+/* Modern card styling */
+.card {
+    border: none;
+    border-radius: 1rem;
+    background-color: var(--card-bg);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    margin-bottom: 2rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+}
+
+.card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.2), transparent);
+}
+
+.card:hover {
+    box-shadow: 0 25px 35px -12px rgba(0, 0, 0, 0.25), 0 15px 20px -10px rgba(0, 0, 0, 0.1);
+    transform: translateY(-3px);
+}
+
+.card-header {
+    background-color: var(--card-header);
+    border-bottom: 1px solid var(--border-color);
+    border-top-left-radius: 1rem !important;
+    border-top-right-radius: 1rem !important;
+    padding: 1.5rem 1.5rem;
+}
+
+.card-body {
+    padding: 1.75rem;
+}
+
+/* Stats card enhancements */
+.bg-gradient-primary, .bg-gradient-success, .bg-gradient-warning, .bg-gradient-danger {
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+}
+
+.bg-gradient-primary::after, .bg-gradient-success::after, 
+.bg-gradient-warning::after, .bg-gradient-danger::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 100%);
+    pointer-events: none;
+}
+
+.bg-gradient-primary h3, .bg-gradient-success h3, 
+.bg-gradient-warning h3, .bg-gradient-danger h3 {
+    font-size: 2.25rem;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Navbar styling */
+.navbar {
+    background: linear-gradient(to right, #1e1e2d, #111827) !important;
+    box-shadow: 0 4px 15px -3px rgba(0, 0, 0, 0.2);
+    padding: 0.9rem 1rem;
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.navbar-brand {
+    font-weight: 600;
+    color: white;
+    letter-spacing: 0.025em;
+}
+
+.nav-link {
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s;
+}
+
+.nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    transform: translateY(-1px);
+}
+
+/* Enhanced buttons */
+.btn {
+    font-weight: 500;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+    border: none;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0));
+    pointer-events: none;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-hover);
+    border-color: var(--primary-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);
+}
+
+.btn-outline-info {
+    color: #38bdf8;
+    border: 1px solid #38bdf8;
+}
+
+.btn-outline-info:hover {
+    background-color: #38bdf8;
+    color: #0f172a;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(56, 189, 248, 0.3);
+}
+
+/* Status badges with modern styling */
 .badge {
     font-weight: 500;
-    padding: 0.4em 0.6em;
+    padding: 0.5em 0.85em;
+    border-radius: 0.375rem;
+    letter-spacing: 0.025em;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.bg-success {
+    background-color: var(--success-color) !important;
+}
+
+.bg-warning {
+    background-color: var(--warning-color) !important;
+}
+
+.bg-danger {
+    background-color: var(--danger-color) !important;
+}
+
+/* Gradient backgrounds for cards */
+.bg-gradient-primary {
+    background: linear-gradient(45deg, #6366f1, #818cf8) !important;
+    box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
+}
+
+.bg-gradient-success {
+    background: linear-gradient(45deg, #10b981, #34d399) !important;
+    box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.3);
+}
+
+.bg-gradient-warning {
+    background: linear-gradient(45deg, #f59e0b, #fbbf24) !important;
+    box-shadow: 0 10px 15px -3px rgba(245, 158, 11, 0.3);
+}
+
+.bg-gradient-danger {
+    background: linear-gradient(45deg, #ef4444, #f87171) !important;
+    box-shadow: 0 10px 15px -3px rgba(239, 68, 68, 0.3);
+}
+
+/* Icon shape for stat cards */
+.icon-shape {
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: white;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.icon-shape i {
+    font-size: 1.5rem;
+}
+
+/* Form controls */
+.form-control, .form-select {
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) inset;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+    background-color: var(--input-bg);
+    color: var(--text-primary);
+}
+
+.form-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+.input-group-text {
+    background-color: var(--card-bg);
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+}
+
+/* Avatar styling */
+.avatar-initials {
+    width: 50px;
+    height: 50px;
+    background-color: var(--primary-color);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 1.25rem;
+    border-radius: 50%;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 /* Table enhancements */
 .table {
+    color: var(--text-primary);
+    border-color: var(--border-color);
+    margin-bottom: 2rem;
+}
+
+.table th {
+    border-top: none;
+    background-color: var(--card-bg);
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    padding: 1rem;
+}
+
+.table td {
     vertical-align: middle;
+    padding: 1rem;
+    border-color: var(--border-color);
 }
 
-/* Card enhancements */
-.card {
-    border-radius: 0.5rem;
-    margin-bottom: 1.5rem;
+.table-hover tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.03);
 }
 
-.card-header {
-    border-top-left-radius: 0.5rem !important;
-    border-top-right-radius: 0.5rem !important;
+.table-striped > tbody > tr:nth-of-type(odd) {
+    background-color: rgba(255, 255, 255, 0.01);
 }
 
-/* Add some subtle hover effects for buttons */
-.btn {
-    transition: all 0.2s ease-in-out;
-}
-
-.btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-/* Custom styles for DataTables */
+/* DataTables customization */
 .dataTables_wrapper .dataTables_length,
 .dataTables_wrapper .dataTables_filter {
-    margin-bottom: 1rem;
+    margin-bottom: 1.5rem;
+    color: var(--text-secondary);
 }
 
 .dataTables_wrapper .dataTables_info {
-    margin-top: 1rem;
+    margin-top: 1.5rem;
+    color: var(--text-secondary);
+    padding-top: 1rem;
 }
 
-/* Make pagination buttons match Bootstrap styles */
+.dataTables_wrapper .dataTables_paginate {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+}
+
 .dataTables_wrapper .dataTables_paginate .paginate_button {
-    padding: 0.375rem 0.75rem;
-    margin-left: 2px;
-    border-radius: 0.25rem;
+    padding: 0.5rem 1rem;
+    margin-left: 0.25rem;
+    border-radius: 0.5rem;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color) !important;
+    color: var(--text-primary) !important;
+    transition: all 0.2s;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+    background: var(--card-header) !important;
+    border-color: var(--primary-color) !important;
+    transform: translateY(-1px);
+    color: white !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 .dataTables_wrapper .dataTables_paginate .paginate_button.current {
-    background: var(--bs-primary) !important;
-    border-color: var(--bs-primary) !important;
+    background: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
     color: white !important;
+    font-weight: 600;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.dataTables_filter input {
+    margin-left: 0.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-color);
+    background-color: var(--input-bg);
+    color: var(--text-primary);
+    padding: 0.625rem 1rem;
+}
+
+/* Animations */
+.badge-pulse {
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(99, 102, 241, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+    }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
 }
 
 /* Custom scrollbar for better UX */
@@ -62,16 +381,26 @@
 }
 
 ::-webkit-scrollbar-track {
-    background: #1e1e1e;
+    background: var(--dark-bg);
+    border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #555;
-    border-radius: 4px;
+    background: #4b5563;
+    border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #777;
+    background: #6b7280;
+}
+
+/* Footer styling */
+footer {
+    margin-top: auto;
+    background: var(--darker-bg) !important;
+    padding: 2rem 0;
+    color: var(--text-secondary);
+    border-top: 1px solid var(--border-color);
 }
 
 /* Responsive adjustments */
@@ -81,40 +410,99 @@
     }
     
     .card-body {
-        padding: 1rem;
+        padding: 1.25rem;
     }
-}
-
-/* Footer styling */
-footer {
-    margin-top: auto;
-}
-
-/* Fix for DataTables search input */
-.dataTables_filter input {
-    margin-left: 0.5rem;
-    border-radius: 0.25rem;
-    border: 1px solid #6c757d;
-    background-color: #212529;
-    color: white;
-    padding: 0.375rem 0.75rem;
-}
-
-/* Help text styling */
-.form-text {
-    color: #adb5bd;
 }
 
 /* Field validation visual feedback */
 .is-invalid {
-    border-color: #dc3545 !important;
+    border-color: var(--danger-color) !important;
 }
 
 .is-valid {
-    border-color: #28a745 !important;
+    border-color: var(--success-color) !important;
 }
 
 /* Add spacing between form sections */
 form .row:not(:last-child) {
-    margin-bottom: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Pre tag styling for email content */
+pre {
+    background-color: var(--dark-bg);
+    border-radius: 0.5rem;
+    padding: 1.25rem;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+/* Status indicators */
+.status-complete, .status-incomplete, .status-error {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    font-weight: 500;
+}
+
+.status-complete {
+    background-color: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+}
+
+.status-incomplete {
+    background-color: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+}
+
+.status-error {
+    background-color: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+/* Filter section styling */
+.filter-section {
+    background-color: var(--card-bg);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* Card header with gradient line */
+.card-header-gradient {
+    position: relative;
+    overflow: hidden;
+}
+
+.card-header-gradient::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(to right, var(--primary-color), var(--success-color), var(--warning-color));
+}
+
+/* Enhanced card shadow effects */
+.shadow-soft {
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.shadow-blue {
+    box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.2);
+}
+
+.shadow-success {
+    box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.2);
+}
+
+.shadow-warning {
+    box-shadow: 0 10px 25px -5px rgba(245, 158, 11, 0.2);
+}
+
+.shadow-danger {
+    box-shadow: 0 10px 25px -5px rgba(239, 68, 68, 0.2);
 }

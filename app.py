@@ -102,11 +102,21 @@ def dashboard():
     status_filter = request.args.get('status', '')
     search_query = request.args.get('search', '')
     
+    # Get counts for dashboard stats
+    total_count = Inquiry.query.count()
+    complete_count = Inquiry.query.filter_by(status='Complete').count()
+    incomplete_count = Inquiry.query.filter_by(status='Incomplete').count()
+    error_count = Inquiry.query.filter_by(status='Error').count()
+    
     return render_template(
         'dashboard.html', 
         title='Booking Inquiry Dashboard',
         status_filter=status_filter,
-        search_query=search_query
+        search_query=search_query,
+        total_count=total_count,
+        complete_count=complete_count,
+        incomplete_count=incomplete_count,
+        error_count=error_count
     )
 
 @app.route('/api/inquiries')
