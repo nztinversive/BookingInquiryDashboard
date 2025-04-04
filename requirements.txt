@@ -1,0 +1,13 @@
+Flask>=2.0
+requests>=2.25
+msal>=1.18
+openai>=1.0
+beautifulsoup4>=4.9
+Flask-SQLAlchemy>=2.5
+psycopg2-binary>=2.9
+flask-login
+flask-sqlalchemy
+flask-wtf
+sqlalchemy
+werkzeug
+wtforms
