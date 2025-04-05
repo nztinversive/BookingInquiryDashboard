@@ -1,0 +1,62 @@
+{% extends "layout.html" %}
+
+{% block title %}Edit Extracted Data{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- Back Link -->
+    <div class="mb-3">
+        <a href="{{ url_for('main.email_detail', graph_id=extracted_data.email_graph_id) }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-2"></i> Back to Email Details
+        </a>
+    </div>
+
+    <div class="card shadow border-0">
+        <div class="card-header bg-light">
+            <h4 class="mb-0">Edit Extracted Data</h4>
+            <p class="text-secondary mb-0">For email: {{ email_subject or 'N/A' }}</p>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('.update_extracted_data', data_id=extracted_data.id) }}">
+                {{ form.csrf_token if form and form.csrf_token }} <!-- Add CSRF token if using Flask-WTF -->
+                
+                {% if extracted_data.data %}
+                    {% for key, value in extracted_data.data.items() %}
+                        <div class="mb-3 row">
+                            <label for="field_{{ key }}" class="col-sm-3 col-form-label">{{ key | replace('_', ' ') | title }}</label>
+                            <div class="col-sm-9">
+                                {% if value is iterable and value is not string and value is not mapping %}
+                                    <!-- Handle lists - currently display only, complex editing needs specific JS -->
+                                    <ul class="list-group">
+                                        {% for item in value %}
+                                            <li class="list-group-item">{{ item }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                    <small class="form-text text-muted">List editing not supported in this basic form.</small>
+                                {% elif value is mapping %}
+                                    <!-- Handle nested dictionaries - display as JSON -->
+                                    <textarea class="form-control" rows="3" readonly>{{ value | tojson(indent=2) }}</textarea>
+                                    <small class="form-text text-muted">Nested object editing not supported in this basic form.</small>
+                                {% else %}
+                                    <!-- Handle simple text/number values -->
+                                    <input type="text" class="form-control" id="field_{{ key }}" name="data_{{ key }}" value="{{ value }}">
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted">No data available to edit.</p>
+                {% endif %}
+
+                <hr>
+                <div class="d-flex justify-content-end">
+                    <a href="{{ url_for('main.email_detail', graph_id=extracted_data.email_graph_id) }}" class="btn btn-secondary me-2">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i> Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

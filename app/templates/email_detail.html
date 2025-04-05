@@ -1,0 +1,115 @@
+{% extends "layout.html" %}
+
+{% block title %}Email Details - {{ email.subject or 'No Subject' }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- Navigation Links -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-2"></i> Back to Dashboard
+        </a>
+        {% if email.extracted_data %}
+        <!-- Edit Button: Only show if extracted data exists -->
+        <a href="{{ url_for('.edit_extracted_data_form', graph_id=email.graph_id) }}" class="btn btn-outline-primary btn-sm">
+            <i class="fas fa-edit me-2"></i> Edit Extracted Data
+        </a>
+        {% endif %}
+    </div>
+
+    <div class="card shadow border-0">
+        <div class="card-header bg-light">
+            <h4 class="mb-0">Email Details</h4>
+        </div>
+        <div class="card-body">
+            <!-- Basic Email Info -->
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <p><strong>Subject:</strong> {{ email.subject or '(No Subject)' }}</p>
+                    <p><strong>From:</strong> {{ email.sender_name or 'N/A' }} &lt;{{ email.sender_address or 'N/A' }}&gt;</p>
+                    <p><strong>Received:</strong> {{ email.received_at.strftime('%Y-%m-%d %H:%M:%S %Z') if email.received_at else 'N/A' }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Graph ID:</strong> <small>{{ email.graph_id }}</small></p>
+                    <p><strong>Processing Status:</strong> 
+                        <span class="badge 
+                            {% if email.processing_status == 'processed' %}bg-success
+                            {% elif email.processing_status == 'pending' %}bg-secondary
+                            {% elif email.processing_status == 'error' %}bg-danger
+                            {% elif email.processing_status == 'needs_review' %}bg-warning text-dark
+                            {% else %}bg-light text-dark
+                            {% endif %}">
+                            {{ email.processing_status | capitalize }}
+                        </span>
+                    </p>
+                    {% if email.processing_error %}
+                    <p class="text-danger"><strong>Error:</strong> {{ email.processing_error }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            <hr>
+            
+            <!-- Extracted Data Section -->
+            <h5 class="mb-3">Extracted Data</h5>
+            {% if email.extracted_data and email.extracted_data.data %}
+                <!-- Use a definition list for better readability -->
+                <dl class="row">
+                    {% for key, value in email.extracted_data.data.items() %}
+                        <dt class="col-sm-3 text-truncate">{{ key | replace('_', ' ') | title }}</dt>
+                        <dd class="col-sm-9">
+                            {% if value is mapping %} <!-- Check if value is a dictionary (nested) -->
+                                <pre class="mb-2 p-2 bg-light border rounded small"><code>{{ value | tojson(indent=2) }}</code></pre>
+                            {% elif value is iterable and value is not string %} <!-- Check if value is a list/tuple -->
+                                <ul class="list-unstyled mb-2">
+                                    {% for item in value %}
+                                        <li>{{ item }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                {{ value }}
+                            {% endif %}
+                        </dd>
+                    {% else %}
+                        <dd class="col-sm-12"><em>No data extracted.</em></dd>
+                    {% endfor %}
+                </dl>
+                <!-- End definition list -->
+
+                <p class="mt-2 text-muted small">
+                    Extracted At: {{ email.extracted_data.extracted_at.strftime('%Y-%m-%d %H:%M:%S %Z') if email.extracted_data.extracted_at else 'N/A' }}
+                    {% if email.extracted_data.updated_at %}
+                     | Updated At: {{ email.extracted_data.updated_at.strftime('%Y-%m-%d %H:%M:%S %Z') }}
+                     {% if email.extracted_data.updated_by_user %} by {{ email.extracted_data.updated_by_user.username }} {% endif %}
+                    {% endif %}
+                     | Source: {{ email.extracted_data.extraction_source or 'N/A' }} 
+                     | Validation: {{ email.extracted_data.validation_status or 'N/A' }}
+                    {% if email.extracted_data.missing_fields %}
+                    | Missing: {{ email.extracted_data.missing_fields }}
+                    {% endif %}
+                </p>
+            {% elif email.extracted_data %}
+                <p class="text-muted">No data was extracted for this email.</p>
+                <p class="mt-2 text-muted small">
+                    Attempted At: {{ email.extracted_data.extracted_at.strftime('%Y-%m-%d %H:%M:%S %Z') if email.extracted_data.extracted_at else 'N/A' }}
+                </p>
+            {% else %}
+                <p class="text-muted">No extraction attempt recorded for this email.</p>
+            {% endif %}
+
+            <!-- Attachments Section (Optional) -->
+            {% if email.attachments %}
+            <hr>
+            <h5 class="mb-3">Attachments</h5>
+            <ul class="list-group list-group-flush">
+                {% for attachment in email.attachments %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-paperclip me-2"></i> {{ attachment.name or 'N/A' }}</span>
+                    <span class="badge bg-secondary rounded-pill">{{ attachment.size_bytes | filesizeformat if attachment.size_bytes else 'N/A' }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

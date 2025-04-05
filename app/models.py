@@ -1,8 +1,9 @@
 from datetime import datetime
-from flask_login import UserMixin
+from flask_login import UserMixin, current_user
 from . import db  # Import db from the app package (__init__.py)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -66,9 +67,15 @@ class ExtractedData(db.Model):
 
     # Metadata about the extraction
     extraction_source = db.Column(db.String, nullable=True) # e.g., local, openai, combined
-    validation_status = db.Column(db.String, nullable=True) # e.g., Complete, Incomplete
+    validation_status = db.Column(db.String, nullable=True) # e.g., Complete, Incomplete, Manually Corrected
     missing_fields = db.Column(db.Text, nullable=True) # Store comma-separated missing fields if incomplete
-    extracted_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
+    extracted_at = db.Column(db.DateTime(timezone=True), server_default=func.now()) # Use server_default for creation
+
+    # --- Fields for Manual Edits --- 
+    updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now()) # Automatically updates on modification
+    updated_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # Who made the last edit (null if system/initial)
+    updated_by_user = db.relationship('User', backref='edited_data') # Relationship to User model
+    # --- End Fields for Manual Edits ---
 
     def __repr__(self):
         return f'<ExtractedData for Email {self.email_graph_id}>'

@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block title %}Dashboard - Booking Inquiry System{% endblock %}
+{% block title %}Dashboard - Email Processing{% endblock %}
 
 {% block content %}
 <div class="row mb-4">
@@ -10,13 +10,14 @@
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <h2 class="mb-0 d-flex align-items-center">
-                            <i class="fas fa-clipboard-list me-3 text-primary"></i>
-                            Booking Inquiries
+                            <i class="fas fa-envelope-open-text me-3 text-primary"></i>
+                            Email Processing Dashboard
                         </h2>
-                        <p class="text-secondary mb-0">Manage and track all customer inquiries</p>
+                        <p class="text-secondary mb-0">Monitor incoming emails and extraction status</p>
                     </div>
-                    <a href="{{ url_for('main.export_csv') }}" class="btn btn-outline-info">
-                        <i class="fas fa-file-export me-2"></i> Export to CSV
+                    <!-- Keep Export button for potential future use -->
+                    <a href="#" class="btn btn-outline-info disabled" aria-disabled="true">
+                        <i class="fas fa-file-export me-2"></i> Export (Not Implemented)
                     </a>
                 </div>
             </div>
@@ -148,24 +149,51 @@
 
                 <!-- Data Table -->
                 <div class="table-responsive mt-4 fade-in">
-                    <table id="inquiriesTable" class="table table-hover" style="width:100%">
+                    <table id="emailsTable" class="table table-hover" style="width:100%">
                         <thead>
                             <tr>
-                                <th width="5%">ID</th>
-                                <th width="12%">Date Received</th>
-                                <th width="15%">Client Name</th>
-                                <th width="15%">Email</th>
-                                <th width="12%">Phone</th>
-                                <th width="15%">Travel Dates</th>
-                                <th width="10%">Trip Cost</th>
-                                <th width="8%">Status</th>
-                                <th width="8%">Actions</th>
+                                <!-- Updated Columns for Email Model -->
+                                <th width="15%">Received At</th>
+                                <th width="20%">Sender</th>
+                                <th width="30%">Subject</th>
+                                <th width="15%">Processing Status</th>
+                                <th width="10%">Extracted?</th> <!-- Simple indicator if ExtractedData exists -->
+                                <th width="10%">Actions</th> <!-- Placeholder for view details link -->
                             </tr>
                         </thead>
                         <tbody>
-                            <!-- DataTables will populate this -->
+                            <!-- Data will be populated dynamically by JavaScript -->
+                            <!-- We will iterate through the 'emails' variable passed from Flask -->
+                            {% for email in emails %}
+                            <tr>
+                                <td>{{ email.received_at.strftime('%Y-%m-%d %H:%M') if email.received_at else 'N/A' }}</td>
+                                <td>{{ email.sender_address or 'N/A' }}</td>
+                                <td>{{ email.subject or '(No Subject)' }}</td>
+                                <td>{{ email.processing_status }}</td>
+                                <td>
+                                    {% if email.extracted_data %}
+                                        <span class="text-success"><i class="fas fa-check-circle"></i> Yes</span>
+                                    {% else %}
+                                        <span class="text-muted"><i class="fas fa-times-circle"></i> No</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <!-- Updated link to detail view -->
+                                    <a href="{{ url_for('main.email_detail', graph_id=email.graph_id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye me-1"></i> Details
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
                         </tbody>
                     </table>
+                    
+                    <!-- Show message if emails list is empty, outside the table body -->
+                    {% if not emails %}
+                        <div class="text-center p-4">
+                            <p class="text-muted mb-0">No emails found.</p>
+                        </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -174,47 +202,53 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<!-- Link to DataTables CSS/JS should be in layout.html -->
+<!-- We don't need the dashboard.js specific to the old inquiry structure anymore for basic display -->
+<!-- <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script> -->
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Handle clear search button
-        document.getElementById('clearSearch').addEventListener('click', function() {
-            document.getElementById('searchBox').value = '';
-            document.getElementById('searchBox').dispatchEvent(new Event('input'));
-        });
-        
-        // Add additional styling to status badges via JS
-        $('#inquiriesTable').on('draw.dt', function () {
-            // Replace status badges with custom styled badges
-            $('td:contains("Complete")').each(function() {
-                if($(this).text().trim() === 'Complete') {
-                    $(this).html('<span class="status-complete"><i class="fas fa-check-circle me-1"></i> Complete</span>');
-                }
+    // Basic DataTables initialization (can be enhanced later)
+    $(document).ready(function() {
+        // Only initialize DataTable if the table body has rows
+        if ($('#emailsTable tbody tr').length > 0) {
+            $('#emailsTable').DataTable({
+                "order": [[ 0, "desc" ]] // Order by Received At descending by default
             });
-            
-            $('td:contains("Incomplete")').each(function() {
-                if($(this).text().trim() === 'Incomplete') {
-                    $(this).html('<span class="status-incomplete"><i class="fas fa-clock me-1"></i> Incomplete</span>');
-                }
-            });
-            
-            $('td:contains("Error")').each(function() {
-                if($(this).text().trim() === 'Error') {
-                    $(this).html('<span class="status-error"><i class="fas fa-exclamation-circle me-1"></i> Error</span>');
-                }
-            });
-            
-            // Add pulse effect to new items (if any feature for "new" items is added)
-            $('.badge-new').addClass('badge-pulse');
-            
-            // Apply animations to rows
-            $('tbody tr').each(function(index) {
-                $(this).css({
-                    'animation-delay': (index * 0.05) + 's',
-                    'animation': 'fadeIn 0.5s ease-out forwards'
+
+            // --- Add styling for processing status --- 
+            // This JS approach is less ideal than using classes directly in the template, 
+            // but works with DataTables dynamic updates.
+            $('#emailsTable').on('draw.dt', function () {
+                $('td:contains("processed")').filter(function() {
+                    return $(this).text().trim() === 'processed';
+                }).html('<span class="status-complete"><i class="fas fa-check-circle me-1"></i> Processed</span>');
+                
+                $('td:contains("pending")').filter(function() {
+                    return $(this).text().trim() === 'pending';
+                }).html('<span class="status-pending"><i class="fas fa-clock me-1"></i> Pending</span>');
+
+                $('td:contains("error")').filter(function() {
+                    return $(this).text().trim() === 'error';
+                }).html('<span class="status-error"><i class="fas fa-exclamation-circle me-1"></i> Error</span>');
+
+                $('td:contains("needs_review")').filter(function() {
+                    return $(this).text().trim() === 'needs_review';
+                }).html('<span class="status-review"><i class="fas fa-search me-1"></i> Needs Review</span>');
+
+                // Apply animations to rows (optional visual flair)
+                $('tbody tr').each(function(index) {
+                    $(this).css({
+                        'animation-delay': (index * 0.05) + 's',
+                        'animation': 'fadeIn 0.5s ease-out forwards'
+                    });
                 });
             });
-        });
+
+            // Trigger initial draw to apply styles
+            $('#emailsTable').DataTable().draw(); 
+        } else {
+            // Optional: If no rows, maybe hide search/length controls if DataTables adds them even on empty init
+            // (This might not be necessary depending on default behavior)
+        }
     });
 </script>
 {% endblock %}
