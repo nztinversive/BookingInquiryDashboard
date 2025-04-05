@@ -16,7 +16,11 @@ login_manager.login_view = 'auth.login' # Specify the login view for redirection
 # --- Application Factory Function ---
 def create_app():
     """Create and configure an instance of the Flask application."""
-    app = Flask(__name__, instance_relative_config=False)
+    # Explicitly set static folder relative to the 'app' directory
+    app = Flask(__name__, 
+                instance_relative_config=False,
+                static_folder='../static', # Go up one level from 'app' directory
+                static_url_path='/static') # Default, but set explicitly
 
     # --- Configuration ---
     # Load default config or config from environment variables
