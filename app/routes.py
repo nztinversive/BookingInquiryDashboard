@@ -6,9 +6,9 @@ from . import db # Import the db object
 import json # Import json for potential type casting
 
 # Create a Blueprint for the main application routes
+# Remove explicit static_folder here to rely on app-level static handling
 main_bp = Blueprint('main', __name__,
-                    template_folder='templates',
-                    static_folder='static')
+                    template_folder='templates')
 
 @main_bp.route('/')
 @main_bp.route('/dashboard') # Add specific dashboard route if needed
