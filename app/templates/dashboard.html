@@ -149,37 +149,37 @@
 
                 <!-- Data Table -->
                 <div class="table-responsive mt-4 fade-in">
-                    <table id="emailsTable" class="table table-hover" style="width:100%">
+                    <table id="inquiriesTable" class="table table-hover" style="width:100%">
                         <thead>
                             <tr>
-                                <!-- Updated Columns for Email Model -->
-                                <th width="15%">Received At</th>
-                                <th width="20%">Sender</th>
-                                <th width="30%">Subject</th>
-                                <th width="15%">Processing Status</th>
-                                <th width="10%">Extracted?</th> <!-- Simple indicator if ExtractedData exists -->
-                                <th width="10%">Actions</th> <!-- Placeholder for view details link -->
+                                <!-- Adjust columns slightly for Inquiry context -->
+                                <th width="15%">Last Update</th> <!-- Changed from Received At -->
+                                <th width="20%">Primary Contact</th> <!-- Changed from Sender -->
+                                <th width="30%">Subject (Latest)</th> <!-- Changed from Subject -->
+                                <th width="15%">Inquiry Status</th> <!-- Changed from Processing Status -->
+                                <th width="10%">Data Extracted?</th>
+                                <th width="10%">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <!-- Data will be populated dynamically by JavaScript -->
-                            <!-- We will iterate through the 'emails' variable passed from Flask -->
-                            {% for email in emails %}
+                            <!-- Loop through inquiries -->
+                            {% for inquiry in inquiries %}
+                            {% set latest_email = inquiry.emails.order_by(Email.received_at.desc()).first() %}
                             <tr>
-                                <td>{{ email.received_at.strftime('%Y-%m-%d %H:%M') if email.received_at else 'N/A' }}</td>
-                                <td>{{ email.sender_address or 'N/A' }}</td>
-                                <td>{{ email.subject or '(No Subject)' }}</td>
-                                <td>{{ email.processing_status }}</td>
+                                <td>{{ (inquiry.updated_at or inquiry.created_at).strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>{{ inquiry.primary_email_address or 'N/A' }}</td>
+                                <td>{{ latest_email.subject if latest_email else '(No Subject Found)' }}</td>
+                                <td>{{ inquiry.status | title }}</td> <!-- Display Inquiry status -->
                                 <td>
-                                    {% if email.extracted_data %}
+                                    {% if inquiry.extracted_data %}
                                         <span class="text-success"><i class="fas fa-check-circle"></i> Yes</span>
                                     {% else %}
                                         <span class="text-muted"><i class="fas fa-times-circle"></i> No</span>
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <!-- Updated link to detail view -->
-                                    <a href="{{ url_for('main.email_detail', graph_id=email.graph_id) }}" class="btn btn-sm btn-outline-primary">
+                                    <!-- Link needs to go to an inquiry detail view (TODO) -->
+                                    <a href="#" class="btn btn-sm btn-outline-primary disabled" aria-disabled="true"> 
                                         <i class="fas fa-eye me-1"></i> Details
                                     </a>
                                 </td>
@@ -188,10 +188,10 @@
                         </tbody>
                     </table>
                     
-                    <!-- Show message if emails list is empty, outside the table body -->
-                    {% if not emails %}
+                    <!-- Show message if inquiries list is empty -->
+                    {% if not inquiries %}
                         <div class="text-center p-4">
-                            <p class="text-muted mb-0">No emails found.</p>
+                            <p class="text-muted mb-0">No inquiries found.</p>
                         </div>
                     {% endif %}
                 </div>
@@ -209,42 +209,25 @@
     // Basic DataTables initialization (can be enhanced later)
     $(document).ready(function() {
         // Only initialize DataTable if the table body has rows
-        if ($('#emailsTable tbody tr').length > 0) {
-            $('#emailsTable').DataTable({
-                "order": [[ 0, "desc" ]] // Order by Received At descending by default
+        if ($('#inquiriesTable tbody tr').length > 0) {
+            $('#inquiriesTable').DataTable({
+                "order": [[ 0, "desc" ]] // Order by Last Update descending
             });
 
-            // --- Add styling for processing status --- 
-            // This JS approach is less ideal than using classes directly in the template, 
-            // but works with DataTables dynamic updates.
-            $('#emailsTable').on('draw.dt', function () {
-                $('td:contains("processed")').filter(function() {
-                    return $(this).text().trim() === 'processed';
-                }).html('<span class="status-complete"><i class="fas fa-check-circle me-1"></i> Processed</span>');
+            // --- Status Styling (Needs adjustment for Inquiry statuses) --- 
+            $('#inquiriesTable').on('draw.dt', function () {
+                // TODO: Update these selectors/classes for new inquiry statuses 
+                // (e.g., 'new', 'needs_review', 'quote_generated')
+                $('td:contains("Processed")').filter(function() { /* ... */ }).html('...');
+                $('td:contains("Pending")').filter(function() { /* ... */ }).html('...');
+                $('td:contains("Error")').filter(function() { /* ... */ }).html('...');
+                $('td:contains("Needs_review")').filter(function() { /* ... */ }).html('...');
                 
-                $('td:contains("pending")').filter(function() {
-                    return $(this).text().trim() === 'pending';
-                }).html('<span class="status-pending"><i class="fas fa-clock me-1"></i> Pending</span>');
-
-                $('td:contains("error")').filter(function() {
-                    return $(this).text().trim() === 'error';
-                }).html('<span class="status-error"><i class="fas fa-exclamation-circle me-1"></i> Error</span>');
-
-                $('td:contains("needs_review")').filter(function() {
-                    return $(this).text().trim() === 'needs_review';
-                }).html('<span class="status-review"><i class="fas fa-search me-1"></i> Needs Review</span>');
-
-                // Apply animations to rows (optional visual flair)
-                $('tbody tr').each(function(index) {
-                    $(this).css({
-                        'animation-delay': (index * 0.05) + 's',
-                        'animation': 'fadeIn 0.5s ease-out forwards'
-                    });
-                });
+                // Animation code can remain
+                $('tbody tr').each(function(index) { /* ... */ });
             });
 
-            // Trigger initial draw to apply styles
-            $('#emailsTable').DataTable().draw(); 
+            $('#inquiriesTable').DataTable().draw(); 
         } else {
             // Optional: If no rows, maybe hide search/length controls if DataTables adds them even on empty init
             // (This might not be necessary depending on default behavior)

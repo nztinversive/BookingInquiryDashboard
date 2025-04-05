@@ -1,7 +1,8 @@
 from flask import Blueprint, render_template, current_app, Response, abort, url_for, request, redirect, flash # Added request, redirect, flash
 from flask_login import login_required, current_user
 from sqlalchemy.exc import SQLAlchemyError # Import specific exception
-from .models import Email, ExtractedData, User # Added User model
+from sqlalchemy.orm import joinedload, selectinload # Added selectinload
+from .models import Email, ExtractedData, User, Inquiry # Added Inquiry model
 from . import db # Import the db object
 import json # Import json for potential type casting
 
@@ -14,18 +15,20 @@ main_bp = Blueprint('main', __name__,
 @main_bp.route('/dashboard') # Add specific dashboard route if needed
 @login_required # Assuming dashboard requires login
 def dashboard():
-    """Render the main dashboard page."""
-    # Query all emails and their extracted data
-    # Using options(joinedload(Email.extracted_data)) for eager loading
-    # to avoid separate queries for each email's data within the template loop.
+    """Render the main dashboard page, now based on Inquiries."""
     try:
-        emails = Email.query.options(db.joinedload(Email.extracted_data)).order_by(Email.received_at.desc()).all()
+        # Query Inquiry records, loading related data
+        inquiries = Inquiry.query.options(
+            # selectinload(Inquiry.emails),  # REMOVED: Incompatible with lazy='dynamic'
+            joinedload(Inquiry.extracted_data) # Keep loading the one-to-one extracted data
+        ).order_by(Inquiry.updated_at.desc(), Inquiry.created_at.desc()).all()
     except Exception as e:
-        current_app.logger.error(f"Error fetching emails for dashboard: {e}")
-        emails = [] # Return an empty list on error
+        current_app.logger.error(f"Error fetching inquiries for dashboard: {e}", exc_info=True) # Log full traceback
+        inquiries = [] # Return an empty list on error
+        flash("Error loading dashboard data.", "danger") # Inform user
 
-    # Pass the emails (which include related extracted_data) to the template
-    return render_template('dashboard.html', user=current_user, emails=emails)
+    # Pass the inquiries list to the template
+    return render_template('dashboard.html', user=current_user, inquiries=inquiries)
 
 # Add other main routes for your dashboard here
 # Example:
