@@ -3,6 +3,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql import func
 
 # Import necessary components from the main app package and services
 # We assume db and models are accessible via the app context later
@@ -22,36 +23,123 @@ polling_thread = None # Global reference to the thread
 
 def process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadata, email_summary):
     """
-    Fetches full email, extracts data, and saves to DB using the provided app context.
-    Triggered by the background poller for new emails.
+    Fetches full email, finds/creates Inquiry, links email, extracts data,
+    merges data into Inquiry's ExtractedData, and saves to DB.
     """
     email_graph_id = email_summary.get('id')
     if not email_graph_id:
         logging.warning("Email summary missing ID. Skipping.")
         return
 
-    logging.info(f"[PollingThread] Processing new email automatically: ID {email_graph_id}")
+    logging.info(f"[PollingThread] Starting processing for email ID: {email_graph_id}")
 
-    # --- Operations requiring DB need app context ---
+    # --- Check if email already exists (outside transaction initially) ---
+    # Needs context for DB access
     with app.app_context():
-        # Check if already processed
+        # Import Inquiry here as it's needed for checks now
+        from .models import Inquiry # Import Inquiry model
+
         try:
             existing_email = db.session.get(Email, email_graph_id)
             if existing_email:
                 logging.info(f"[PollingThread] Email {email_graph_id} already found in DB (Status: {existing_email.processing_status}). Skipping.")
                 return
         except Exception as db_check_err:
-             logging.error(f"[PollingThread] Error checking DB for existing email {email_graph_id}: {db_check_err}")
-             # Continue processing, maybe create will fail gracefully if duplicate
-             pass # Or return if DB check is critical
+            logging.error(f"[PollingThread] Error checking DB for existing email {email_graph_id}: {db_check_err}")
+            # Decide if safe to proceed - could lead to duplicate processing attempts
+            # For now, let's risk it and rely on later IntegrityError handling
+            pass
 
-        processing_status = 'pending' # Initial status
-        processing_error_msg = None
+    # --- Fetching and Extraction (Can happen outside DB transaction) ---
+    email_details = None
+    extracted_data_dict = {}
+    source = None
+    validation_status = "Incomplete"
+    missing_fields_list = []
+    attachments_list = []
+    sender_address = None
+    sender_name = None
+
+    try:
+        # 1. Fetch full email details (including body and sender)
+        logging.info(f"[PollingThread] Fetching full details for {email_graph_id}...")
+        email_details = ms_fetch_email_details(email_graph_id)
+        if not email_details:
+            raise Exception(f"Failed to fetch full details for email {email_graph_id}")
+
+        email_body_html = email_details.get("body", {}).get("content", "")
+        sender_info = email_details.get('from', {}).get('emailAddress', {})
+        sender_address = sender_info.get('address') # Extract sender address early
+        sender_name = sender_info.get('name')
+        if not sender_address:
+            logging.warning(f"[PollingThread] Email {email_graph_id} missing sender address. Cannot link to Inquiry effectively.")
+            # Decide how to handle: Skip? Process without Inquiry link?
+            # For now, let's log and continue, it might fail later when trying to find/create Inquiry.
+
+        # 2. Extract data
+        logging.info(f"[PollingThread] Extracting data for {email_graph_id}...")
+        extracted_data_dict, source = extract_travel_data(email_body_html)
+        logging.info(f"[PollingThread] Extraction complete for {email_graph_id}. Source: {source}. Data keys: {list(extracted_data_dict.keys())}")
+
+        # 3. Validate extracted data
+        essential_fields = ["first_name", "last_name", "travel_start_date", "travel_end_date", "trip_cost"]
+        missing_fields_list = [field for field in essential_fields if not extracted_data_dict.get(field)]
+        validation_status = "Incomplete" if missing_fields_list else "Complete"
+        logging.info(f"[PollingThread] Validation status for {email_graph_id}: {validation_status}. Missing: {missing_fields_list}")
+
+        # 4. Fetch attachments list
+        logging.info(f"[PollingThread] Fetching attachments list for {email_graph_id}...")
+        attachments_list = ms_fetch_attachments_list(email_graph_id)
+
+    except Exception as fetch_extract_err:
+        # If fetching or extraction fails *before* DB operations, log and exit.
+        # No email record created yet.
+        logging.error(f"[PollingThread] Error during fetch/extraction for email {email_graph_id}: {fetch_extract_err}", exc_info=True)
+        # Optionally, create an Email record marked as 'fetch_error' or similar if needed.
+        # For now, just return.
+        return
+
+    # --- DB Operations: Inquiry finding/creation, Email creation, Data merging ---
+    with app.app_context():
+        # Re-import models within context
+        from .models import Inquiry, Email, ExtractedData, AttachmentMetadata
+
+        # Check again if email was created by a concurrent process
+        existing_email_check = db.session.get(Email, email_graph_id)
+        if existing_email_check:
+            logging.info(f"[PollingThread] Email {email_graph_id} was created by another process. Skipping.")
+            return
+
+        inquiry = None
         new_email_instance = None
+        inquiry_extracted_data = None
 
         try:
-            # --- Create initial Email record to lock it ---
-            # Parse received_at from summary - handle potential errors
+            # --- Find or Create Inquiry ---
+            if sender_address:
+                inquiry = db.session.query(Inquiry).filter_by(primary_email_address=sender_address).first()
+                if inquiry:
+                    logging.info(f"[PollingThread] Found existing Inquiry ID {inquiry.id} for sender {sender_address}")
+                else:
+                    logging.info(f"[PollingThread] No existing Inquiry found for {sender_address}. Creating new one.")
+                    inquiry = Inquiry(
+                        primary_email_address=sender_address,
+                        status='new' # Or derive status based on data/email content later
+                    )
+                    db.session.add(inquiry)
+                    # We need the inquiry ID, flush to get it before creating ExtractedData if needed
+                    db.session.flush()
+                    logging.info(f"[PollingThread] Created new Inquiry ID {inquiry.id}")
+            else:
+                # Handle case where sender address was missing
+                # Option 1: Fail processing
+                # raise ValueError(f"Cannot process email {email_graph_id} without a sender address to link to an Inquiry.")
+                # Option 2: Log and skip Inquiry linking (email won't appear on dashboard)
+                logging.warning(f"[PollingThread] Skipping Inquiry link for email {email_graph_id} due to missing sender address.")
+                # Option 3: Create a placeholder Inquiry (less ideal)
+                # For now, we proceed without an inquiry link if address is missing
+
+            # --- Create Email Record ---
             received_dt = None
             received_dt_str = email_summary.get('receivedDateTime')
             try:
@@ -67,124 +155,128 @@ def process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadat
                 graph_id=email_graph_id,
                 subject=email_summary.get('subject'),
                 received_at=received_dt,
-                processing_status='processing' # Mark as actively processing
+                processing_status='processing', # Mark as processing
+                sender_address=sender_address, # Save sender info
+                sender_name=sender_name
+                # inquiry_id will be set below if inquiry exists
             )
+
+            if inquiry: # Only link if we found/created an inquiry
+                new_email_instance.inquiry_id = inquiry.id
+
             db.session.add(new_email_instance)
-            db.session.commit() # Commit immediately to prevent race conditions
-            logging.info(f"[PollingThread] Created initial DB record for email {email_graph_id}")
-            # --- ---
+            logging.info(f"[PollingThread] Prepared Email record for {email_graph_id}. Linked to Inquiry: {inquiry.id if inquiry else 'No'}")
 
-            # Fetching/Extraction can happen outside context if they don't need DB/app config directly
-            # (Assuming service functions handle their own config e.g., API keys from env vars)
+            # --- Find or Create/Merge ExtractedData for the Inquiry ---
+            if inquiry:
+                inquiry_extracted_data = db.session.query(ExtractedData).filter_by(inquiry_id=inquiry.id).first()
 
-        except IntegrityError as ie:
-             logging.warning(f"[PollingThread] DB Integrity error creating initial record for {email_graph_id}: {ie}. Likely duplicate, skipping.")
-             db.session.rollback()
-             return # Stop processing this email
-        except Exception as initial_db_err:
-             logging.error(f"[PollingThread] Error creating initial DB record for {email_graph_id}: {initial_db_err}", exc_info=True)
-             db.session.rollback()
-             return # Stop processing this email
+                if not inquiry_extracted_data:
+                    logging.info(f"[PollingThread] No ExtractedData found for Inquiry {inquiry.id}. Creating new one.")
+                    inquiry_extracted_data = ExtractedData(
+                        inquiry_id=inquiry.id,
+                        data=extracted_data_dict, # Start with data from this email
+                        extraction_source=source,
+                        validation_status=validation_status,
+                        missing_fields=",".join(missing_fields_list) if missing_fields_list else None
+                    )
+                    # Link via relationship automatically happens if `backref` is set correctly
+                    # inquiry.extracted_data = inquiry_extracted_data # Or explicitly set
+                    db.session.add(inquiry_extracted_data)
+                else:
+                    logging.info(f"[PollingThread] Found existing ExtractedData for Inquiry {inquiry.id}. Merging data.")
+                    # --- Data Merging Logic ---
+                    # Simple strategy: Fill empty fields in existing data with new data
+                    current_data = inquiry_extracted_data.data or {}
+                    merged_data = current_data.copy() # Start with existing data
+                    updated = False
+                    for key, value in extracted_data_dict.items():
+                        # Only update if the new value is not empty AND
+                        # (the key doesn't exist in merged_data OR the existing value is empty/None)
+                        if value and (key not in merged_data or not merged_data[key]):
+                            merged_data[key] = value
+                            updated = True
+                            logging.debug(f"[PollingThread] Merged/Updated key '{key}' for Inquiry {inquiry.id}")
 
+                    if updated:
+                        inquiry_extracted_data.data = merged_data
+                        # Re-validate based on merged data
+                        merged_missing = [field for field in essential_fields if not merged_data.get(field)]
+                        inquiry_extracted_data.validation_status = "Incomplete" if merged_missing else "Complete"
+                        inquiry_extracted_data.missing_fields = ",".join(merged_missing) if merged_missing else None
+                        # extraction_source could potentially list multiple sources over time? Or just the latest?
+                        inquiry_extracted_data.extraction_source = source # Overwrite with latest source for now
+                        logging.info(f"[PollingThread] Merged data updated for Inquiry {inquiry.id}. New status: {inquiry_extracted_data.validation_status}")
+                    else:
+                        logging.info(f"[PollingThread] No new data merged into existing ExtractedData for Inquiry {inquiry.id}.")
 
-    # --- Fetching and Extraction (Outside initial DB transaction) ---
-    try:
-        # 1. Fetch full email details (including body)
-        logging.info(f"[PollingThread] Fetching full details for {email_graph_id}...")
-        email_details = ms_fetch_email_details(email_graph_id)
-        if not email_details:
-            raise Exception(f"Failed to fetch full details for email {email_graph_id}")
-
-        email_body_html = email_details.get("body", {}).get("content", "")
-        sender_info = email_details.get('from', {}).get('emailAddress', {})
-
-        # 2. Extract data
-        logging.info(f"[PollingThread] Extracting data for {email_graph_id}...")
-        extracted_data_dict, source = extract_travel_data(email_body_html)
-        logging.info(f"[PollingThread] Extraction complete for {email_graph_id}. Source: {source}. Data keys: {list(extracted_data_dict.keys())}")
-
-        # 3. Validate data
-        essential_fields = ["first_name", "last_name", "travel_start_date", "travel_end_date", "trip_cost"]
-        missing_fields_list = [field for field in essential_fields if not extracted_data_dict.get(field)]
-        validation_status = "Incomplete" if missing_fields_list else "Complete"
-        logging.info(f"[PollingThread] Validation status for {email_graph_id}: {validation_status}. Missing: {missing_fields_list}")
-
-        # 4. Fetch attachments list
-        logging.info(f"[PollingThread] Fetching attachments list for {email_graph_id}...")
-        attachments_list = ms_fetch_attachments_list(email_graph_id)
-
-        # --- Save Extracted Data and Attachments to DB --- (Requires app_context again)
-        with app.app_context():
-            # Reload the email instance to ensure it's bound to this session
-            email_to_update = db.session.get(Email, email_graph_id)
-            if not email_to_update:
-                 raise Exception(f"Could not find email {email_graph_id} in DB to update.")
-
-            # Update sender info fetched earlier
-            email_to_update.sender_address = sender_info.get('address')
-            email_to_update.sender_name = sender_info.get('name')
-
-            # Create ExtractedData record
-            new_extracted_data = ExtractedData(
-                # email_graph_id is automatically handled by backref
-                data=extracted_data_dict, # Store the whole dict as JSONB
-                extraction_source=source,
-                validation_status=validation_status,
-                missing_fields=",".join(missing_fields_list) if missing_fields_list else None
-            )
-            email_to_update.extracted_data = new_extracted_data # Link via relationship
-            logging.debug(f"[PollingThread] Prepared ExtractedData for {email_graph_id}")
-
-            # Create AttachmentMetadata records
+            # --- Create AttachmentMetadata records ---
             if attachments_list:
                 logging.debug(f"[PollingThread] Processing {len(attachments_list)} attachments for {email_graph_id}")
                 for att_meta in attachments_list:
-                    # Check if attachment already exists (e.g., if reprocessing)
+                    # Check if attachment already exists (should be rare if email check passed)
                     existing_att = db.session.get(AttachmentMetadata, att_meta.get('id'))
                     if not existing_att:
                         new_att = AttachmentMetadata(
                             graph_id=att_meta.get('id'),
-                            # email_graph_id is handled by backref
+                            email_graph_id=email_graph_id, # Explicitly set FK
                             name=att_meta.get('name'),
                             content_type=att_meta.get('contentType'),
                             size_bytes=att_meta.get('size')
                         )
-                        email_to_update.attachments.append(new_att) # Link via relationship
+                        db.session.add(new_att) # Add directly to session
+                        # Relationship linking happens via FK email_graph_id
                         logging.debug(f"[PollingThread] Prepared AttachmentMetadata: {att_meta.get('name')}")
                     else:
-                         logging.debug(f"[PollingThread] Attachment {att_meta.get('id')} already exists. Skipping.")
+                        logging.debug(f"[PollingThread] Attachment {att_meta.get('id')} already exists. Skipping.")
 
-            # Update final status
-            email_to_update.processing_status = 'processed'
-            email_to_update.processed_at = datetime.now(timezone.utc)
-            email_to_update.processing_error = None # Clear previous errors
 
-            db.session.commit() # Commit all changes for this email
-            logging.info(f"[PollingThread] Successfully processed and saved email {email_graph_id} to database.")
-            processing_status = 'processed' # Final status
+            # --- Finalize Email Status and Inquiry Timestamp ---
+            new_email_instance.processing_status = 'processed'
+            new_email_instance.processed_at = datetime.now(timezone.utc)
+            new_email_instance.processing_error = None # Clear previous errors
 
-    except Exception as e:
-        processing_status = 'error'
-        processing_error_msg = f"Error processing email {email_graph_id} after initial DB record: {e}"
-        logging.error(processing_error_msg, exc_info=True)
-        # Update status to error in DB
-        with app.app_context():
+            if inquiry:
+                # Trigger Inquiry's updated_at timestamp by modifying it (SQLAlchemy detects change)
+                # Alternatively, explicitly set: inquiry.updated_at = datetime.now(timezone.utc)
+                # Forcing an update by changing status slightly if needed, or just rely on session flush
+                inquiry.status = inquiry.status # No-op change to maybe trigger onupdate? Safer to rely on merged data changes.
+                # If ExtractedData was modified, its onupdate should trigger.
+                # If only Email was added, we might need to explicitly update Inquiry timestamp:
+                inquiry.updated_at = datetime.now(timezone.utc) # Explicitly update timestamp
+
+            db.session.commit() # Commit all changes for this email and inquiry
+            logging.info(f"[PollingThread] Successfully processed email {email_graph_id} and updated Inquiry {inquiry.id if inquiry else 'N/A'}.")
+
+        except IntegrityError as ie:
+            db.session.rollback()
+            logging.warning(f"[PollingThread] DB Integrity error during processing for {email_graph_id}: {ie}. Likely duplicate race condition, skipping.")
+            # Don't update status, let the other process handle it.
+        except Exception as process_err:
+            db.session.rollback()
+            error_msg = f"Error processing email {email_graph_id} within DB transaction: {process_err}"
+            logging.error(f"[PollingThread] {error_msg}", exc_info=True)
+            # Update Email status to 'error' in a separate transaction
             try:
-                error_email = db.session.get(Email, email_graph_id)
-                if error_email:
-                    error_email.processing_status = 'error'
-                    error_email.processing_error = str(processing_error_msg)[:1000] # Limit error length
-                    error_email.processed_at = datetime.now(timezone.utc)
-                    db.session.commit()
-                    logging.info(f"[PollingThread] Updated email {email_graph_id} status to 'error' in DB.")
-                else:
-                    logging.warning(f"[PollingThread] Could not find email {email_graph_id} to mark as error.")
-            except Exception as db_err:
-                logging.error(f"[PollingThread] Failed to update email {email_graph_id} status to error in DB: {db_err}")
-                db.session.rollback() # Rollback the error update attempt
+                # Need a fresh session/context potentially, or retry within a new block
+                with app.app_context(): # New context for error update
+                    email_to_mark_error = db.session.get(Email, email_graph_id)
+                    if email_to_mark_error:
+                        # If the email record itself failed to commit earlier, this might still fail
+                        email_to_mark_error.processing_status = 'error'
+                        email_to_mark_error.processing_error = str(error_msg)[:1000] # Limit error length
+                        email_to_mark_error.processed_at = datetime.now(timezone.utc)
+                        db.session.commit()
+                        logging.info(f"[PollingThread] Marked email {email_graph_id} as 'error' in DB.")
+                    else:
+                        # This case happens if the initial Email creation failed and was rolled back.
+                        logging.warning(f"[PollingThread] Could not find email {email_graph_id} to mark as error (it might not have been committed).")
+            except Exception as db_err_update:
+                logging.error(f"[PollingThread] Failed even to update email {email_graph_id} status to error in DB: {db_err_update}")
+                # Rollback might not be needed if commit failed
 
 
-def poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata):
+def poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata, Inquiry):
     """Fetches recent emails based on timestamp and triggers processing."""
     global last_checked_timestamp
     logging.info("[PollingThread] Polling for new emails...")
@@ -192,8 +284,21 @@ def poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata):
     # Ensure last_checked_timestamp is initialized before first use
     if last_checked_timestamp is None:
         # On first run, set timestamp to avoid fetching everything
-        last_checked_timestamp = datetime.now(timezone.utc) - timedelta(minutes=10)
-        logging.info(f"[PollingThread] First poll run. Setting initial timestamp to: {last_checked_timestamp.isoformat()}")
+        # Query the latest received_at from existing emails as a better starting point?
+        try:
+            latest_email_time = db.session.query(func.max(Email.received_at)).scalar()
+            if latest_email_time:
+                last_checked_timestamp = latest_email_time
+                logging.info(f"[PollingThread] Initialized last_checked_timestamp from latest email in DB: {last_checked_timestamp.isoformat()}")
+            else:
+                # Fallback if no emails in DB
+                last_checked_timestamp = datetime.now(timezone.utc) - timedelta(minutes=30) # Check last 30 mins first time
+                logging.info(f"[PollingThread] No emails in DB. Setting initial timestamp to: {last_checked_timestamp.isoformat()}")
+        except Exception as init_ts_err:
+            logging.error(f"[PollingThread] Error getting latest email time for initial timestamp: {init_ts_err}. Falling back.")
+            last_checked_timestamp = datetime.now(timezone.utc) - timedelta(minutes=30)
+            logging.info(f"[PollingThread] Fallback initial timestamp: {last_checked_timestamp.isoformat()}")
+
 
     try:
         # Use the ensured timestamp for the check
@@ -212,8 +317,8 @@ def poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata):
             for email_summary in new_emails:
                 logging.info(f"  - [PollingThread] Queueing Email ID: {email_summary.get('id')}, Subject: {email_summary.get('subject')}, Received: {email_summary.get('receivedDateTime')}")
                 # --- Trigger processing ---
-                # Pass dependencies explicitly
-                process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadata, email_summary)
+                # Pass dependencies explicitly, including Inquiry
+                process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadata, email_summary) # Keep original args for now, it imports Inquiry inside
                 # ------------------------
 
                 # Update latest timestamp processed *within this batch*
@@ -225,18 +330,18 @@ def poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata):
                         new_timestamp = datetime.fromisoformat(received_dt_str)
 
                     if new_timestamp > latest_processed_timestamp:
-                         latest_processed_timestamp = new_timestamp
+                        latest_processed_timestamp = new_timestamp
 
                 except (KeyError, ValueError, TypeError) as ts_err:
-                     logging.error(f"[PollingThread] Error parsing timestamp from email {email_summary.get('id')}: {ts_err}. Timestamp will not advance based on this email.")
-                     # Don't update timestamp based on this email if parsing failed
+                    logging.error(f"[PollingThread] Error parsing timestamp from email {email_summary.get('id')}: {ts_err}. Timestamp will not advance based on this email.")
+                    # Don't update timestamp based on this email if parsing failed
 
             # Only advance the timestamp if a newer email was successfully processed
             if latest_processed_timestamp > last_checked_timestamp:
                 last_checked_timestamp = latest_processed_timestamp
                 logging.info(f"[PollingThread] Advanced last_checked_timestamp to: {last_checked_timestamp.isoformat()}") # Use INFO level
             else:
-                 logging.debug("[PollingThread] No newer emails processed in this batch, timestamp remains unchanged.")
+                logging.debug("[PollingThread] No newer emails processed in this batch, timestamp remains unchanged.")
 
 
         else:
@@ -257,7 +362,7 @@ def background_poller(app):
 
     # Need models and db, but imports might happen late in app factory
     # Wait briefly for app context to be available before first poll attempt
-    stop_polling.wait(5) # Wait 5 seconds before first poll
+    stop_polling.wait(10) # Wait 10 seconds before first poll (increased slightly)
 
     while not stop_polling.is_set():
         try:
@@ -265,12 +370,14 @@ def background_poller(app):
                  # Import models and db instance *inside* context just before use
                  # This handles cases where they are initialized later in app factory
                  from . import db # Assumes db is in app/__init__.py
-                 from .models import Email, ExtractedData, AttachmentMetadata
+                 # Import all required models for poll_new_emails
+                 from .models import Email, ExtractedData, AttachmentMetadata, Inquiry
 
                  if not db:
                       logging.error("[PollingThread] DB instance not available in app context. Skipping poll cycle.")
                  else:
-                      poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata)
+                      # Pass Inquiry to poll_new_emails
+                      poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata, Inquiry)
 
         except Exception as e:
             # Log errors occurring outside the main poll_new_emails try-except
