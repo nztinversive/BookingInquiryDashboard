@@ -314,11 +314,75 @@ def poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata, Inquiry):
         if new_emails:
             # Process oldest new email first to maintain order
             logging.info(f"[PollingThread] Found {len(new_emails)} new email(s). Processing...")
+            processed_count = 0
+            filtered_count = 0
             for email_summary in new_emails:
-                logging.info(f"  - [PollingThread] Queueing Email ID: {email_summary.get('id')}, Subject: {email_summary.get('subject')}, Received: {email_summary.get('receivedDateTime')}")
-                # --- Trigger processing ---
+                logging.info(f"  - [PollingThread] Checking Email ID: {email_summary.get('id')}, Subject: {email_summary.get('subject')}, Received: {email_summary.get('receivedDateTime')}")
+
+                # --- Filtering Logic --- 
+                should_filter = False
+                is_likely_inquiry = False # Flag for positive match
+                filter_reason = ""
+                
+                # Define Keywords (can be moved to config later)
+                NEGATIVE_FILTERS = {
+                    "senders": ["@linkedin.com", "@ringcentral.com"],
+                    "subjects": ["linkedin", "undeliverable", "out of office", "automatic reply", 
+                                 "ringcentral", "incoming fax", "voicemail message"]
+                }
+                POSITIVE_SUBJECT_KEYWORDS = ["quote", "request", "trip", "travel", "inquiry", "booking"]
+
+                try:
+                    # Get sender and subject for filtering (case-insensitive)
+                    sender_info = email_summary.get('from', {}).get('emailAddress', {})
+                    sender_address = (sender_info.get('address') or "").lower()
+                    subject = (email_summary.get('subject') or "").lower()
+
+                    # 1. Negative Filtering (Check if it should be immediately ignored)
+                    for pattern in NEGATIVE_FILTERS["senders"]:
+                        if pattern in sender_address:
+                            should_filter = True
+                            filter_reason = f"Sender matches negative pattern: {pattern}"
+                            break # No need to check further negative rules
+                    
+                    if not should_filter:
+                        for pattern in NEGATIVE_FILTERS["subjects"]:
+                            if pattern in subject:
+                                should_filter = True
+                                filter_reason = f"Subject matches negative pattern: {pattern}"
+                                break
+                    
+                    # 2. Positive Filtering (Only if it didn't match negative filters)
+                    if not should_filter:
+                        for keyword in POSITIVE_SUBJECT_KEYWORDS:
+                            if keyword in subject:
+                                is_likely_inquiry = True
+                                break # Found at least one positive keyword
+                        
+                        # If no positive keywords found in subject, filter it out
+                        if not is_likely_inquiry:
+                            should_filter = True
+                            filter_reason = "Subject does not contain positive inquiry keywords"
+
+                except Exception as filter_err:
+                    logging.warning(f"[PollingThread] Error during filtering check for email {email_summary.get('id')}: {filter_err}. Processing will proceed.")
+                    should_filter = False # Default to processing if filter logic errors
+
+                if should_filter:
+                    # Use a different log level (e.g., INFO or DEBUG) for filtered non-inquiries vs definite spam
+                    if filter_reason == "Subject does not contain positive inquiry keywords":
+                         logging.debug(f"  - [PollingThread] Skipping email ID: {email_summary.get('id')}. Reason: {filter_reason}")
+                    else:
+                         logging.info(f"  - [PollingThread] Filtering out Email ID: {email_summary.get('id')}. Reason: {filter_reason}")
+                    filtered_count += 1
+                    continue # Skip to the next email summary
+                # --- End Filtering Logic ---
+
+                logging.info(f"  - [PollingThread] Email ID: {email_summary.get('id')} passed filters. Proceeding to process.")
+                # --- Trigger processing --- 
                 # Pass dependencies explicitly, including Inquiry
-                process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadata, email_summary) # Keep original args for now, it imports Inquiry inside
+                process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadata, email_summary)
+                processed_count += 1
                 # ------------------------
 
                 # Update latest timestamp processed *within this batch*
@@ -341,7 +405,9 @@ def poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata, Inquiry):
                 last_checked_timestamp = latest_processed_timestamp
                 logging.info(f"[PollingThread] Advanced last_checked_timestamp to: {last_checked_timestamp.isoformat()}") # Use INFO level
             else:
-                logging.debug("[PollingThread] No newer emails processed in this batch, timestamp remains unchanged.")
+                 logging.debug("[PollingThread] No newer emails processed in this batch, timestamp remains unchanged.")
+            
+            logging.info(f"[PollingThread] Batch complete. Processed: {processed_count}, Filtered: {filtered_count}")
 
 
         else:

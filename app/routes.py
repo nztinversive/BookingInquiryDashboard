@@ -27,8 +27,25 @@ def dashboard():
         inquiries = [] # Return an empty list on error
         flash("Error loading dashboard data.", "danger") # Inform user
 
-    # Pass the inquiries list to the template
-    return render_template('dashboard.html', user=current_user, inquiries=inquiries)
+    # Prepare data for the template, including the latest email for each inquiry
+    dashboard_data = []
+    for inquiry in inquiries:
+        latest_email = None
+        try:
+            # Query the latest email associated with this inquiry
+            # Assuming Inquiry.emails is a dynamic relationship
+            latest_email = inquiry.emails.order_by(Email.received_at.desc()).first()
+        except Exception as email_query_err:
+            # Log if fetching the latest email fails for a specific inquiry
+            current_app.logger.error(f"Error fetching latest email for Inquiry {inquiry.id}: {email_query_err}")
+        
+        dashboard_data.append({
+            'inquiry': inquiry,
+            'latest_email': latest_email
+        })
+
+    # Pass the prepared data list to the template
+    return render_template('dashboard.html', user=current_user, dashboard_items=dashboard_data)
 
 # Add other main routes for your dashboard here
 # Example:
@@ -74,23 +91,27 @@ def email_detail(graph_id):
 
 # --- Routes for Editing Extracted Data ---
 
-@main_bp.route('/email/<string:graph_id>/edit', methods=['GET'])
+# Changed route to accept data_id instead of graph_id
+@main_bp.route('/extracted_data/<int:data_id>/edit', methods=['GET'])
 @login_required
-def edit_extracted_data_form(graph_id):
-    """Display the form to edit extracted data for a specific email."""
-    # Fetch the email and its extracted data. Use first_or_404 for simplicity.
-    email = Email.query.options(
-        db.joinedload(Email.extracted_data)
-    ).filter_by(graph_id=graph_id).first_or_404()
+def edit_extracted_data_form(data_id):
+    """Display the form to edit extracted data for a specific Inquiry."""
+    # Fetch the ExtractedData object directly
+    extracted_data = ExtractedData.query.options(
+        joinedload(ExtractedData.inquiry) # Load the inquiry for context
+    ).get_or_404(data_id)
 
-    if not email.extracted_data:
-        flash(f"No extracted data found for email {graph_id} to edit.", "warning")
-        return redirect(url_for('.email_detail', graph_id=graph_id))
+    if not extracted_data:
+        # This case is less likely with get_or_404, but good practice
+        flash(f"No extracted data found for ID {data_id} to edit.", "warning")
+        # Redirect back to dashboard if inquiry context is lost
+        return redirect(url_for('.dashboard')) 
 
-    # Pass the ExtractedData object to the template
+    # Pass the ExtractedData object and inquiry context to the template
     return render_template('edit_extracted_data.html', 
-                           extracted_data=email.extracted_data, 
-                           email_subject=email.subject, # Pass subject for context
+                           extracted_data=extracted_data, 
+                           # Use inquiry's primary address for context instead of email subject
+                           inquiry_context=extracted_data.inquiry.primary_email_address if extracted_data.inquiry else "Unknown Inquiry",
                            user=current_user)
 
 @main_bp.route('/extracted_data/<int:data_id>/update', methods=['POST'])
@@ -98,8 +119,11 @@ def edit_extracted_data_form(graph_id):
 def update_extracted_data(data_id):
     """Handle the submission of the edited extracted data form."""
     # Find the specific ExtractedData record
-    data_to_update = ExtractedData.query.get_or_404(data_id)
-    original_email_graph_id = data_to_update.email_graph_id # Store before potential changes
+    data_to_update = ExtractedData.query.options(
+        joinedload(ExtractedData.inquiry) # Load inquiry to get its ID for redirect
+    ).get_or_404(data_id)
+    # Get the inquiry_id before potential changes
+    inquiry_id_for_redirect = data_to_update.inquiry_id 
 
     try:
         # 1. Get data from request.form and reconstruct the 'data' dictionary
@@ -140,9 +164,15 @@ def update_extracted_data(data_id):
         # 5. Add logging
         current_app.logger.info(f"User {current_user.username} (ID: {current_user.id}) updated ExtractedData ID: {data_id}")
 
-        # 6. Redirect back to detail page with flash message
+        # 6. Redirect back to inquiry detail page with flash message
         flash("Extracted data updated successfully.", "success")
-        return redirect(url_for('.email_detail', graph_id=original_email_graph_id))
+        # Redirect to inquiry detail using the stored inquiry_id
+        if inquiry_id_for_redirect:
+             return redirect(url_for('.inquiry_detail', inquiry_id=inquiry_id_for_redirect))
+        else:
+             # Fallback to dashboard if inquiry_id wasn't found (shouldn't happen with get_or_404)
+             flash("Could not determine inquiry to redirect back to.", "warning")
+             return redirect(url_for('.dashboard'))
 
     except SQLAlchemyError as e:
         db.session.rollback() # Rollback in case of DB error
@@ -153,8 +183,34 @@ def update_extracted_data(data_id):
         current_app.logger.error(f"Unexpected error updating ExtractedData ID {data_id}: {e}")
         flash("An unexpected error occurred.", "danger")
 
-    # If any error occurred, redirect back to the edit form or detail page
+    # If any error occurred, redirect back to the inquiry detail page
     # Redirecting to detail page to avoid losing context if form re-render is complex
-    return redirect(url_for('.email_detail', graph_id=original_email_graph_id))
+    if inquiry_id_for_redirect:
+        return redirect(url_for('.inquiry_detail', inquiry_id=inquiry_id_for_redirect))
+    else:
+        # Fallback if redirect inquiry ID isn't available
+        return redirect(url_for('.dashboard')) 
 
 # --- End Edit Routes --- 
+
+# --- New Route for Inquiry Details ---
+@main_bp.route('/inquiry/<int:inquiry_id>')
+@login_required
+def inquiry_detail(inquiry_id):
+    """Show details for a specific Inquiry, its data, and associated emails."""
+    try:
+        # Query for the inquiry, eagerly load extracted data
+        # We can't eager load 'emails' because it's a dynamic relationship
+        inquiry = Inquiry.query.options(
+            joinedload(Inquiry.extracted_data)
+            # selectinload(Inquiry.emails) # REMOVED: Incompatible with lazy='dynamic'
+        ).get_or_404(inquiry_id)
+
+    except Exception as e:
+        # Log unexpected errors during query
+        current_app.logger.error(f"Error fetching inquiry details for inquiry_id {inquiry_id}: {e}")
+        abort(500, description="Error retrieving inquiry details.") # Internal server error
+
+    # Render a new template, passing the inquiry object
+    return render_template('inquiry_detail.html', inquiry=inquiry, user=current_user)
+# --- End Inquiry Detail Route --- 
