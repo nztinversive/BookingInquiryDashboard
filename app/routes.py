@@ -27,6 +27,14 @@ def dashboard():
         inquiries = [] # Return an empty list on error
         flash("Error loading dashboard data.", "danger") # Inform user
 
+    # Calculate counts for dashboard cards
+    total_count = len(inquiries)
+    complete_count = sum(1 for i in inquiries if i.status == 'Complete' or i.status == 'Manually Corrected') # Count corrected as complete
+    # Count 'New' inquiries as Incomplete for the summary card
+    incomplete_count = sum(1 for i in inquiries if i.status == 'Incomplete' or i.status == 'new') 
+    error_count = sum(1 for i in inquiries if i.status == 'Error' or i.status == 'Processing Failed')
+    # Note: 'New' status is now explicitly counted in incomplete_count.
+
     # Prepare data for the template, including the latest email for each inquiry
     dashboard_data = []
     for inquiry in inquiries:
@@ -44,8 +52,15 @@ def dashboard():
             'latest_email': latest_email
         })
 
-    # Pass the prepared data list to the template
-    return render_template('dashboard.html', user=current_user, dashboard_items=dashboard_data)
+    # Pass the prepared data list and counts to the template
+    return render_template('dashboard.html', 
+                           user=current_user, 
+                           dashboard_items=dashboard_data,
+                           total_count=total_count,
+                           complete_count=complete_count,
+                           incomplete_count=incomplete_count,
+                           error_count=error_count
+                           )
 
 # Add other main routes for your dashboard here
 # Example:
