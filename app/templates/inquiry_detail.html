@@ -96,8 +96,8 @@
                         {% else %}
                         <span class="text-muted fst-italic">No data extracted yet.</span>
                         {% endif %}
-                    </div>
-                </div>
+                                        </div>
+                                    </div>
                 <div class="card-body p-3">
                     {% if inquiry.extracted_data and inquiry.extracted_data.data %}
                         <dl class="row">
@@ -134,13 +134,23 @@
                                 {% if not is_complete %}<i class="fas fa-exclamation-triangle me-1"></i>{% endif %}Validation Status:
                             </div>
                             <div class="col-sm-8 text-sm {% if not is_complete %}fw-bold{% endif %}">{{ inquiry.extracted_data.validation_status | title if inquiry.extracted_data.validation_status else 'N/A'}}</div>
-                        </div>
+                                        </div>
                          <div class="row {% if not is_complete and inquiry.extracted_data.missing_fields %}text-warning{% endif %}">
                             <div class="col-sm-4 text-sm text-end pe-0">
                                 Missing Fields:
                             </div>
-                            {# Only show missing fields if they exist #}
-                            <div class="col-sm-8 text-sm">{{ inquiry.extracted_data.missing_fields if inquiry.extracted_data.missing_fields else 'None'}}</div>
+                            {# Format missing fields into a list #}
+                            <div class="col-sm-8 text-sm">
+                                {% if inquiry.extracted_data and inquiry.extracted_data.missing_fields %}
+                                    <ul class="list-unstyled mb-0">
+                                        {% for field in inquiry.extracted_data.missing_fields.split(',') %}
+                                            <li>{{ field | replace('_', ' ') | title }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                {% else %}
+                                    None
+                                {% endif %}
+                            </div>
                         </div>
                         {# --- End Highlight --- #}
                         <div class="row">
@@ -151,16 +161,16 @@
                                 {% else %}
                                     Never
                                 {% endif %}
-                            </div>
-                        </div>
+                                        </div>
+                                    </div>
                     {% else %}
                         <p class="text-center text-muted">No extracted data available for this inquiry.</p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
     <!-- Associated Emails -->
     <div class="row mt-4">
         <div class="col-12">

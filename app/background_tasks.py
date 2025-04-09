@@ -289,9 +289,9 @@ def process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadat
                     # Commit changes after potential modification
                     # Only commit if we found and tried to update at least one record
                     if email_to_mark_error or inquiry_to_mark_error:
-                        db.session.commit()
+                    db.session.commit()
                         logging.info(f"[PollingThread] Successfully updated error status for Email: {email_graph_id} / Inquiry: {inquiry_id_to_mark_error}")
-                    else:
+                else:
                          logging.info("[PollingThread] No records found to update error status.")
 
             except Exception as db_err_update:
