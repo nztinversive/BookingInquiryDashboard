@@ -23,6 +23,61 @@ except Exception as e:
     openai_client = None
 # --- ---
 
+# --- Intent Classification --- 
+def classify_email_intent(subject, body_preview):
+    """Classifies email intent using OpenAI."""
+    if not openai_client:
+        logging.warning("OpenAI client not available. Cannot classify intent.")
+        return "unknown" # Default if client fails
+    if not subject and not body_preview:
+        logging.warning("No subject or body preview for intent classification.")
+        return "unknown"
+
+    logging.info("Calling OpenAI API for intent classification...")
+    system_message = """You are an AI assistant classifying emails for a travel insurance agency. 
+Classify the intent of the following email based on its subject and body preview.
+Possible intents are:
+- 'inquiry': A customer is asking for a quote, pricing, information about travel insurance, or providing details for a quote.
+- 'spam': Unsolicited commercial email, phishing, or irrelevant marketing.
+- 'solicitation': A business is trying to sell services *to* the agency (e.g., marketing, web design, SEO).
+- 'out_of_office': An automatic reply indicating someone is away.
+- 'undeliverable': A bounce-back message about a failed email delivery.
+- 'confirmation': A confirmation of a booking or action (less common for incoming).
+- 'personal': Non-business related personal email.
+- 'other': The email doesn't fit clearly into the above categories.
+
+Respond ONLY with the single intent label (e.g., 'inquiry', 'spam', 'solicitation')."""
+
+    user_content = f"Subject: {subject}\n\nBody Preview (first 100 chars):\n{body_preview[:100]}...\n\nIntent:"
+
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini", # Use a fast and capable model
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_content}
+            ],
+            temperature=0.1, # Very low temperature for focused classification
+            max_tokens=20, # Limit response length to just the label
+            timeout=30 # Shorter timeout for classification
+        )
+
+        intent_label = response.choices[0].message.content.strip().lower()
+        logging.info(f"Received intent classification from OpenAI: {intent_label}")
+        
+        # Basic validation of the label
+        valid_intents = ['inquiry', 'spam', 'solicitation', 'out_of_office', 'undeliverable', 'confirmation', 'personal', 'other']
+        if intent_label in valid_intents:
+            return intent_label
+        else:
+            logging.warning(f"OpenAI returned an unexpected intent label: '{intent_label}'. Defaulting to 'other'.")
+            return "other"
+
+    except Exception as openai_e:
+        logging.error(f"Error during OpenAI intent classification: {openai_e}", exc_info=True)
+        return "unknown" # Return unknown on error
+# --- ---
+
 def get_text_from_html(html_content):
     """Extracts plain text from HTML content."""
     if not html_content:

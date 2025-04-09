@@ -13,7 +13,7 @@ from ms_graph_service import (
     fetch_attachments_list as ms_fetch_attachments_list,
     fetch_new_emails_since as ms_fetch_new_emails_since
 )
-from data_extraction_service import extract_travel_data
+from data_extraction_service import extract_travel_data, classify_email_intent
 
 # --- Background Polling Setup ---
 POLL_INTERVAL_SECONDS = 120  # Check every 2 minutes
@@ -21,10 +21,11 @@ last_checked_timestamp = None # Store the timestamp of the last successful check
 stop_polling = threading.Event() # Event to signal thread to stop
 polling_thread = None # Global reference to the thread
 
-def process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadata, email_summary):
+def process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadata, email_summary, classified_intent):
     """
     Fetches full email, finds/creates Inquiry, links email, extracts data,
     merges data into Inquiry's ExtractedData, and saves to DB.
+    Also saves the pre-classified intent.
     """
     email_graph_id = email_summary.get('id')
     if not email_graph_id:
@@ -156,8 +157,9 @@ def process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadat
                 subject=email_summary.get('subject'),
                 received_at=received_dt,
                 processing_status='processing', # Mark as processing
-                sender_address=sender_address, # Save sender info
-                sender_name=sender_name
+                sender_address=sender_address,
+                sender_name=sender_name,
+                intent=classified_intent # Save the classified intent here
                 # inquiry_id will be set below if inquiry exists
             )
 
@@ -165,7 +167,7 @@ def process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadat
                 new_email_instance.inquiry_id = inquiry.id
 
             db.session.add(new_email_instance)
-            logging.info(f"[PollingThread] Prepared Email record for {email_graph_id}. Linked to Inquiry: {inquiry.id if inquiry else 'No'}")
+            logging.info(f"[PollingThread] Prepared Email record for {email_graph_id}. Intent: '{classified_intent}'. Linked to Inquiry: {inquiry.id if inquiry else 'No'}")
 
             # --- Find or Create/Merge ExtractedData for the Inquiry ---
             if inquiry:
@@ -246,7 +248,7 @@ def process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadat
                 inquiry.updated_at = datetime.now(timezone.utc) # Explicitly update timestamp
 
             db.session.commit() # Commit all changes for this email and inquiry
-            logging.info(f"[PollingThread] Successfully processed email {email_graph_id} and updated Inquiry {inquiry.id if inquiry else 'N/A'}.")
+            logging.info(f"[PollingThread] Successfully processed email {email_graph_id} (Intent: '{classified_intent}') and updated Inquiry {inquiry.id if inquiry else 'N/A'}.")
 
         except IntegrityError as ie:
             db.session.rollback()
@@ -254,28 +256,27 @@ def process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadat
             # Don't update status, let the other process handle it.
         except Exception as process_err:
             db.session.rollback()
-            error_msg = f"Error processing email {email_graph_id} within DB transaction: {process_err}"
+            error_msg = f"Error processing email {email_graph_id} (Intent: '{classified_intent}') within DB transaction: {process_err}"
             logging.error(f"[PollingThread] {error_msg}", exc_info=True)
             
-            # Capture inquiry ID before trying the error update transaction
             inquiry_id_to_mark_error = inquiry.id if inquiry else None
             
             # Update Email and Inquiry status to 'error' in a separate transaction
             try:
-                # Need a fresh session/context potentially, or retry within a new block
                 with app.app_context(): # New context for error update
                     email_to_mark_error = db.session.get(Email, email_graph_id)
                     inquiry_to_mark_error = None
                     
                     if email_to_mark_error:
-                         # If the email record itself failed to commit earlier, this might still fail
                          email_to_mark_error.processing_status = 'error'
-                         email_to_mark_error.processing_error = str(error_msg)[:1000] # Limit error length
+                         email_to_mark_error.processing_error = str(error_msg)[:1000]
                          email_to_mark_error.processed_at = datetime.now(timezone.utc)
-                         logging.info(f"[PollingThread] Attempting to mark Email {email_graph_id} as 'error'...")
+                         # Make sure intent is still saved even on error
+                         if email_to_mark_error.intent is None: # Avoid overwriting if already set
+                             email_to_mark_error.intent = classified_intent
+                         logging.info(f"[PollingThread] Attempting to mark Email {email_graph_id} (Intent: '{classified_intent}') as 'error'...")
                     else:
-                         # This case happens if the initial Email creation failed and was rolled back.
-                         logging.warning(f"[PollingThread] Could not find email {email_graph_id} to mark as error (it might not have been committed).")
+                         logging.warning(f"[PollingThread] Could not find email {email_graph_id} to mark as error (it might not have been committed). Cannot save intent '{classified_intent}'.")
                          
                     # Attempt to mark Inquiry as error too
                     if inquiry_id_to_mark_error:
@@ -289,9 +290,9 @@ def process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadat
                     # Commit changes after potential modification
                     # Only commit if we found and tried to update at least one record
                     if email_to_mark_error or inquiry_to_mark_error:
-                    db.session.commit()
+                        db.session.commit()
                         logging.info(f"[PollingThread] Successfully updated error status for Email: {email_graph_id} / Inquiry: {inquiry_id_to_mark_error}")
-                else:
+                    else:
                          logging.info("[PollingThread] No records found to update error status.")
 
             except Exception as db_err_update:
@@ -342,12 +343,13 @@ def poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata, Inquiry):
             for email_summary in new_emails:
                 logging.info(f"  - [PollingThread] Checking Email ID: {email_summary.get('id')}, Subject: {email_summary.get('subject')}, Received: {email_summary.get('receivedDateTime')}")
 
-                # --- Filtering Logic --- 
+                # --- Filtering Logic V2 (Intent Classification) --- 
                 should_filter = False
-                is_likely_inquiry = False # Flag for positive match
+                classified_intent = "unknown" # Default intent
                 filter_reason = ""
+                email_id = email_summary.get('id')
                 
-                # Define Keywords (can be moved to config later)
+                # Define Negative Filters (can be moved to config later)
                 NEGATIVE_FILTERS = {
                     "senders": ["@linkedin.com", "@ringcentral.com", 
                                 "@promomail.microsoft.com", "@libertyutilities.com", "@calendly.com"],
@@ -355,13 +357,11 @@ def poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata, Inquiry):
                                  "ringcentral", "incoming fax", "voicemail message",
                                  "urgent:", "expertise in", "learn how", 
                                  "online bill is now available", "new event:",
-                                 "new voice message from wireless caller"]
+                                 "new voice message from wireless caller",
+                                 # Add potential solicitation keywords?
+                                 "mobile app", "app consultant", "web design", "seo services"]
                 }
-                POSITIVE_KEYWORDS = ["quote", "request", "trip", "travel", "inquiry", "booking", 
-                                       "itinerary", "pricing", "cost", "availability", "destination",
-                                       # Added based on examples/discussion
-                                       "cruise", "insurance", "address", "dates", "payment"]
-                                       # Removed "information" as potentially too broad
+                # POSITIVE_KEYWORDS list is no longer needed for primary filtering
 
                 try:
                     # Get sender, subject, and body preview for filtering (case-insensitive)
@@ -370,19 +370,19 @@ def poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata, Inquiry):
                     subject = (email_summary.get('subject') or "").lower()
                     body_preview = (email_summary.get('bodyPreview') or "").lower()
                     
-                    # --- Add Detailed Logging for Debugging ---
-                    logging.debug(f"  - [PollingThread] Filter Check - ID: {email_summary.get('id')}")
-                    logging.debug(f"      Sender Address: '{sender_address}'")
-                    logging.debug(f"      Subject: '{subject}'")
-                    logging.debug(f"      Body Preview: '{body_preview[:100]}...'") # Log first 100 chars
-                    # -------------------------------------------
+                    # --- Comment out Detailed Logging ---
+                    # logging.debug(f"  - [PollingThread] Filter Check - ID: {email_id}")
+                    # logging.debug(f"      Sender Address: '{sender_address}'")
+                    # logging.debug(f"      Subject: '{subject}'")
+                    # logging.debug(f"      Body Preview: '{body_preview[:100]}...'")
+                    # ------------------------------------
 
-                    # 1. Negative Filtering (Check if it should be immediately ignored)
+                    # 1. Negative Filtering (First pass to quickly discard obvious non-inquiries)
                     for pattern in NEGATIVE_FILTERS["senders"]:
                         if pattern in sender_address:
                             should_filter = True
                             filter_reason = f"Sender matches negative pattern: {pattern}"
-                            break # No need to check further negative rules
+                            break
                     
                     if not should_filter:
                         for pattern in NEGATIVE_FILTERS["subjects"]:
@@ -391,45 +391,38 @@ def poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata, Inquiry):
                                 filter_reason = f"Subject matches negative pattern: {pattern}"
                                 break
                     
-                    # 2. Positive Filtering (Only if it didn't match negative filters)
+                    # 2. AI Intent Classification (Only if it passed negative filters)
                     if not should_filter:
-                        is_likely_inquiry = False # Reset flag
-                        # Check subject OR body preview for positive keywords
-                        text_to_check = subject + " " + body_preview # Combine for easier checking
+                        # logging.debug(f"  - [PollingThread] Passed negative filters. Classifying intent for {email_id}...") # Optional: keep this if helpful
+                        classified_intent = classify_email_intent(subject, body_preview)
+                        logging.info(f"  - [PollingThread] Classified Intent for {email_id}: '{classified_intent}'")
                         
-                        for keyword in POSITIVE_KEYWORDS: # Use the combined list
-                            if keyword in text_to_check:
-                                is_likely_inquiry = True
-                                logging.debug(f"  - [PollingThread] Positive keyword '{keyword}' found for Email ID: {email_summary.get('id')}")
-                                break # Found at least one positive keyword
-                        
-                        # If no positive keywords found in subject or body preview, filter it out
-                        if not is_likely_inquiry:
+                        # Filter out emails not classified as 'inquiry'
+                        if classified_intent != 'inquiry':
                             should_filter = True
-                            filter_reason = "Subject or body preview does not contain positive inquiry keywords"
+                            filter_reason = f"Classified intent is '{classified_intent}', not 'inquiry'"
+                        # else: # Intent is 'inquiry', proceed to processing
+                        #    pass
 
                 except Exception as filter_err:
-                    logging.warning(f"[PollingThread] Error during filtering check for email {email_summary.get('id')}: {filter_err}. Processing will proceed.")
-                    should_filter = False # Default to processing if filter logic errors
+                    logging.warning(f"[PollingThread] Error during filtering/classification for email {email_id}: {filter_err}. Processing will proceed (intent='unknown').")
+                    should_filter = False # Default to processing if filter logic errors, but intent remains unknown
+                    classified_intent = "unknown"
 
                 if should_filter:
-                    # Use a different log level (e.g., INFO or DEBUG) for filtered non-inquiries vs definite spam
-                    if filter_reason == "Subject or body preview does not contain positive inquiry keywords":
-                         logging.debug(f"  - [PollingThread] Skipping email ID: {email_summary.get('id')}. Reason: {filter_reason}")
-                    else:
-                         logging.info(f"  - [PollingThread] Filtering out Email ID: {email_summary.get('id')}. Reason: {filter_reason}")
+                    logging.info(f"  - [PollingThread] Filtering out Email ID: {email_id}. Reason: {filter_reason}")
                     filtered_count += 1
                     continue # Skip to the next email summary
-                # --- End Filtering Logic ---
+                # --- End Filtering Logic V2 ---
 
-                logging.info(f"  - [PollingThread] Email ID: {email_summary.get('id')} passed filters. Proceeding to process.")
-                # --- Trigger processing ---
-                # Pass dependencies explicitly, including Inquiry
-                process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadata, email_summary)
+                logging.info(f"  - [PollingThread] Email ID: {email_id} classified as '{classified_intent}'. Proceeding to process.")
+                # --- Trigger processing --- 
+                # Pass the classified intent to the processing function
+                process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadata, email_summary, classified_intent)
                 processed_count += 1
                 # ------------------------
 
-                # --- Timestamp Update Logic (Moved Inside Loop) ---
+                # --- Timestamp Update Logic (Remains the same) ---
                 # Always update latest_processed_timestamp to the timestamp of the *current* email being checked
                 # This ensures we advance past filtered emails
                 try:
@@ -442,21 +435,21 @@ def poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata, Inquiry):
                     # Update the high water mark for this batch
                     if current_email_timestamp > latest_processed_timestamp:
                         latest_processed_timestamp = current_email_timestamp
-                        logging.debug(f"  - [PollingThread] Updated latest_processed_timestamp for batch to: {latest_processed_timestamp.isoformat()}")
+                        # logging.debug(f"  - [PollingThread] Updated latest_processed_timestamp for batch to: {latest_processed_timestamp.isoformat()}") # Comment out timestamp debug log
 
                 except (KeyError, ValueError, TypeError) as ts_err:
                      logging.error(f"[PollingThread] Error parsing timestamp from email {email_summary.get('id')}: {ts_err}. Timestamp for batch might not advance correctly.")
                      # Don't update timestamp based on this email if parsing failed, but allow loop to continue
                 # --- End Timestamp Update Logic ---
 
-            # --- Final Timestamp Advancement ---
+            # --- Final Timestamp Advancement (Remains the same) ---
             # After checking all emails in the batch, advance the global timestamp 
             # if the latest checked email timestamp is newer than the starting timestamp.
             if latest_processed_timestamp > last_checked_timestamp:
                 last_checked_timestamp = latest_processed_timestamp
                 logging.info(f"[PollingThread] Advanced global last_checked_timestamp to: {last_checked_timestamp.isoformat()}")
             else:
-                logging.debug("[PollingThread] No emails checked in this batch had a timestamp newer than the last global check. Timestamp remains unchanged.")
+                pass # logging.debug("[PollingThread] No emails checked in this batch had a timestamp newer than the last global check. Timestamp remains unchanged.") # Comment out this debug log
             # --------------------------------
             
             logging.info(f"[PollingThread] Batch complete. Processed: {processed_count}, Filtered: {filtered_count}")
@@ -504,7 +497,7 @@ def background_poller(app):
 
         # Wait for the specified interval or until stop event is set
         wait_time = POLL_INTERVAL_SECONDS
-        logging.debug(f"[PollingThread] Polling cycle complete. Waiting for {wait_time} seconds...")
+        # logging.debug(f"[PollingThread] Polling cycle complete. Waiting for {wait_time} seconds...") # Comment out this debug log
         stop_polling.wait(wait_time)
 
     logging.info("Background email polling thread stopped.")

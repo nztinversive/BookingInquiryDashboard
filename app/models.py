@@ -43,6 +43,7 @@ class Email(db.Model):
     processing_error = db.Column(db.Text, nullable=True)
     inquiry_id = db.Column(db.Integer, db.ForeignKey('inquiries.id'), nullable=True, index=True)
     attachments = db.relationship('AttachmentMetadata', backref='email', cascade="all, delete-orphan")
+    intent = db.Column(db.String(50), nullable=True, index=True)
 
     def __repr__(self):
         return f'<Email {self.graph_id} - {self.subject[:30]}>'
