@@ -256,27 +256,43 @@ def process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadat
             db.session.rollback()
             error_msg = f"Error processing email {email_graph_id} within DB transaction: {process_err}"
             logging.error(f"[PollingThread] {error_msg}", exc_info=True)
-            # Update Email status to 'error' in a separate transaction
+            
+            # Capture inquiry ID before trying the error update transaction
+            inquiry_id_to_mark_error = inquiry.id if inquiry else None
+            
+            # Update Email and Inquiry status to 'error' in a separate transaction
             try:
                 # Need a fresh session/context potentially, or retry within a new block
                 with app.app_context(): # New context for error update
                     email_to_mark_error = db.session.get(Email, email_graph_id)
+                    inquiry_to_mark_error = None
+                    
                     if email_to_mark_error:
                          # If the email record itself failed to commit earlier, this might still fail
                          email_to_mark_error.processing_status = 'error'
                          email_to_mark_error.processing_error = str(error_msg)[:1000] # Limit error length
                          email_to_mark_error.processed_at = datetime.now(timezone.utc)
-                         # Corrected indent for logging:
-                         logging.info(f"[PollingThread] Marked email {email_graph_id} as 'error' in DB.")
+                         logging.info(f"[PollingThread] Attempting to mark Email {email_graph_id} as 'error'...")
                     else:
                          # This case happens if the initial Email creation failed and was rolled back.
-                         # Corrected indent for logging:
                          logging.warning(f"[PollingThread] Could not find email {email_graph_id} to mark as error (it might not have been committed).")
+                         
+                    # Attempt to mark Inquiry as error too
+                    if inquiry_id_to_mark_error:
+                        inquiry_to_mark_error = db.session.get(Inquiry, inquiry_id_to_mark_error)
+                        if inquiry_to_mark_error:
+                             inquiry_to_mark_error.status = 'Error' # Set Inquiry status
+                             logging.info(f"[PollingThread] Attempting to mark Inquiry {inquiry_id_to_mark_error} as 'Error'...")
+                        else:
+                             logging.warning(f"[PollingThread] Could not find Inquiry {inquiry_id_to_mark_error} to mark as Error.")
 
-                    # Commit changes after potential modification (still inside 'with')
-                    # Only commit if we found and potentially modified the record
-                    if email_to_mark_error:
+                    # Commit changes after potential modification
+                    # Only commit if we found and tried to update at least one record
+                    if email_to_mark_error or inquiry_to_mark_error:
                         db.session.commit()
+                        logging.info(f"[PollingThread] Successfully updated error status for Email: {email_graph_id} / Inquiry: {inquiry_id_to_mark_error}")
+                    else:
+                         logging.info("[PollingThread] No records found to update error status.")
 
             except Exception as db_err_update:
                 logging.error(f"[PollingThread] Failed even to update email {email_graph_id} status to error in DB: {db_err_update}")
