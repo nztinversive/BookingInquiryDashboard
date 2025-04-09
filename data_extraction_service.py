@@ -196,21 +196,21 @@ Your task is to accurately identify and extract the following fields:
 - trip_cost: The total cost of the trip (numeric value if possible, e.g., 1234.56)
 - email: Their primary email address
 - phone_number: Their primary phone number
-- travelers: An array containing ALL travelers (including the primary one), each with first_name, last_name, and date_of_birth (standardize DOB if possible).
+- travelers: An array containing ALL travelers mentioned (including the primary one). **Crucially, for EACH traveler in this array, include their first_name, last_name, and date_of_birth.** Standardize the date_of_birth to YYYY-MM-DD if possible; otherwise, use the format found. If a specific traveler's DOB is not mentioned, use null for their date_of_birth field.
 
-Look carefully for ALL travelers mentioned. Return only a valid JSON object with these exact keys. If a value cannot be found, use null.
+Look carefully for ALL travelers and their associated dates of birth. Return only a valid JSON object with these exact keys. If a top-level value cannot be found, use null.
 Be meticulous. Double-check extracted information against the source text. Do not add explanations or fields not requested."""
 
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini", # Or specify another capable model
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": f"Extract the required information from this text:\n\n---\n{content}\n---"}
             ],
             response_format={"type": "json_object"},
-            temperature=0.2, # Lower temperature for more factual extraction
-            timeout=90 # Increased timeout
+            temperature=0.2,
+            timeout=90
         )
 
         extracted_str = response.choices[0].message.content
