@@ -146,7 +146,7 @@ def fetch_new_emails_since(timestamp):
 
         params = {
             '$top': 50, # Limit results per poll
-            '$select': 'id,subject,receivedDateTime,isRead', # Select only needed fields for polling
+            '$select': 'id,subject,receivedDateTime,isRead,from,bodyPreview', 
             '$filter': filter_query,
             '$orderby': 'receivedDateTime asc' # Process oldest first within the new batch
         }

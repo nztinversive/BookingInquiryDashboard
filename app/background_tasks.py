@@ -45,10 +45,10 @@ def process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadat
                 logging.info(f"[PollingThread] Email {email_graph_id} already found in DB (Status: {existing_email.processing_status}). Skipping.")
                 return
         except Exception as db_check_err:
-            logging.error(f"[PollingThread] Error checking DB for existing email {email_graph_id}: {db_check_err}")
-            # Decide if safe to proceed - could lead to duplicate processing attempts
-            # For now, let's risk it and rely on later IntegrityError handling
-            pass
+             logging.error(f"[PollingThread] Error checking DB for existing email {email_graph_id}: {db_check_err}")
+             # Decide if safe to proceed - could lead to duplicate processing attempts
+             # For now, let's risk it and rely on later IntegrityError handling
+             pass
 
     # --- Fetching and Extraction (Can happen outside DB transaction) ---
     email_details = None
@@ -74,7 +74,7 @@ def process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadat
         if not sender_address:
             logging.warning(f"[PollingThread] Email {email_graph_id} missing sender address. Cannot link to Inquiry effectively.")
             # Decide how to handle: Skip? Process without Inquiry link?
-            # For now, let's log and continue, it might fail later when trying to find/create Inquiry.
+            # For now, log and continue, it might fail later when trying to find/create Inquiry.
 
         # 2. Extract data
         logging.info(f"[PollingThread] Extracting data for {email_graph_id}...")
@@ -176,10 +176,10 @@ def process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadat
                     inquiry_extracted_data = ExtractedData(
                         inquiry_id=inquiry.id,
                         data=extracted_data_dict, # Start with data from this email
-                        extraction_source=source,
-                        validation_status=validation_status,
-                        missing_fields=",".join(missing_fields_list) if missing_fields_list else None
-                    )
+                extraction_source=source,
+                validation_status=validation_status,
+                missing_fields=",".join(missing_fields_list) if missing_fields_list else None
+            )
                     # Link via relationship automatically happens if `backref` is set correctly
                     # inquiry.extracted_data = inquiry_extracted_data # Or explicitly set
                     db.session.add(inquiry_extracted_data)
@@ -228,7 +228,7 @@ def process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadat
                         # Relationship linking happens via FK email_graph_id
                         logging.debug(f"[PollingThread] Prepared AttachmentMetadata: {att_meta.get('name')}")
                     else:
-                        logging.debug(f"[PollingThread] Attachment {att_meta.get('id')} already exists. Skipping.")
+                         logging.debug(f"[PollingThread] Attachment {att_meta.get('id')} already exists. Skipping.")
 
 
             # --- Finalize Email Status and Inquiry Timestamp ---
@@ -262,15 +262,22 @@ def process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadat
                 with app.app_context(): # New context for error update
                     email_to_mark_error = db.session.get(Email, email_graph_id)
                     if email_to_mark_error:
-                        # If the email record itself failed to commit earlier, this might still fail
-                        email_to_mark_error.processing_status = 'error'
-                        email_to_mark_error.processing_error = str(error_msg)[:1000] # Limit error length
-                        email_to_mark_error.processed_at = datetime.now(timezone.utc)
-                        db.session.commit()
-                        logging.info(f"[PollingThread] Marked email {email_graph_id} as 'error' in DB.")
+                         # If the email record itself failed to commit earlier, this might still fail
+                         email_to_mark_error.processing_status = 'error'
+                         email_to_mark_error.processing_error = str(error_msg)[:1000] # Limit error length
+                         email_to_mark_error.processed_at = datetime.now(timezone.utc)
+                         # Corrected indent for logging:
+                         logging.info(f"[PollingThread] Marked email {email_graph_id} as 'error' in DB.")
                     else:
-                        # This case happens if the initial Email creation failed and was rolled back.
-                        logging.warning(f"[PollingThread] Could not find email {email_graph_id} to mark as error (it might not have been committed).")
+                         # This case happens if the initial Email creation failed and was rolled back.
+                         # Corrected indent for logging:
+                         logging.warning(f"[PollingThread] Could not find email {email_graph_id} to mark as error (it might not have been committed).")
+
+                    # Commit changes after potential modification (still inside 'with')
+                    # Only commit if we found and potentially modified the record
+                    if email_to_mark_error:
+                        db.session.commit()
+
             except Exception as db_err_update:
                 logging.error(f"[PollingThread] Failed even to update email {email_graph_id} status to error in DB: {db_err_update}")
                 # Rollback might not be needed if commit failed
@@ -326,17 +333,32 @@ def poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata, Inquiry):
                 
                 # Define Keywords (can be moved to config later)
                 NEGATIVE_FILTERS = {
-                    "senders": ["@linkedin.com", "@ringcentral.com"],
+                    "senders": ["@linkedin.com", "@ringcentral.com", 
+                                "@promomail.microsoft.com", "@libertyutilities.com", "@calendly.com"],
                     "subjects": ["linkedin", "undeliverable", "out of office", "automatic reply", 
-                                 "ringcentral", "incoming fax", "voicemail message"]
+                                 "ringcentral", "incoming fax", "voicemail message",
+                                 "urgent:", "expertise in", "learn how", 
+                                 "online bill is now available", "new event:",
+                                 "new voice message from wireless caller"]
                 }
-                POSITIVE_SUBJECT_KEYWORDS = ["quote", "request", "trip", "travel", "inquiry", "booking"]
+                POSITIVE_KEYWORDS = ["quote", "request", "trip", "travel", "inquiry", "booking", 
+                                       "itinerary", "pricing", "cost", "availability", "destination",
+                                       # Added based on examples/discussion
+                                       "cruise", "insurance", "address", "dates", "payment", "information"]
 
                 try:
-                    # Get sender and subject for filtering (case-insensitive)
+                    # Get sender, subject, and body preview for filtering (case-insensitive)
                     sender_info = email_summary.get('from', {}).get('emailAddress', {})
                     sender_address = (sender_info.get('address') or "").lower()
                     subject = (email_summary.get('subject') or "").lower()
+                    body_preview = (email_summary.get('bodyPreview') or "").lower()
+                    
+                    # --- Add Detailed Logging for Debugging ---
+                    logging.debug(f"  - [PollingThread] Filter Check - ID: {email_summary.get('id')}")
+                    logging.debug(f"      Sender Address: '{sender_address}'")
+                    logging.debug(f"      Subject: '{subject}'")
+                    logging.debug(f"      Body Preview: '{body_preview[:100]}...'") # Log first 100 chars
+                    # -------------------------------------------
 
                     # 1. Negative Filtering (Check if it should be immediately ignored)
                     for pattern in NEGATIVE_FILTERS["senders"]:
@@ -354,15 +376,20 @@ def poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata, Inquiry):
                     
                     # 2. Positive Filtering (Only if it didn't match negative filters)
                     if not should_filter:
-                        for keyword in POSITIVE_SUBJECT_KEYWORDS:
-                            if keyword in subject:
+                        is_likely_inquiry = False # Reset flag
+                        # Check subject OR body preview for positive keywords
+                        text_to_check = subject + " " + body_preview # Combine for easier checking
+                        
+                        for keyword in POSITIVE_KEYWORDS: # Use the combined list
+                            if keyword in text_to_check:
                                 is_likely_inquiry = True
+                                logging.debug(f"  - [PollingThread] Positive keyword '{keyword}' found for Email ID: {email_summary.get('id')}")
                                 break # Found at least one positive keyword
                         
-                        # If no positive keywords found in subject, filter it out
+                        # If no positive keywords found in subject or body preview, filter it out
                         if not is_likely_inquiry:
                             should_filter = True
-                            filter_reason = "Subject does not contain positive inquiry keywords"
+                            filter_reason = "Subject or body preview does not contain positive inquiry keywords"
 
                 except Exception as filter_err:
                     logging.warning(f"[PollingThread] Error during filtering check for email {email_summary.get('id')}: {filter_err}. Processing will proceed.")
@@ -370,7 +397,7 @@ def poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata, Inquiry):
 
                 if should_filter:
                     # Use a different log level (e.g., INFO or DEBUG) for filtered non-inquiries vs definite spam
-                    if filter_reason == "Subject does not contain positive inquiry keywords":
+                    if filter_reason == "Subject or body preview does not contain positive inquiry keywords":
                          logging.debug(f"  - [PollingThread] Skipping email ID: {email_summary.get('id')}. Reason: {filter_reason}")
                     else:
                          logging.info(f"  - [PollingThread] Filtering out Email ID: {email_summary.get('id')}. Reason: {filter_reason}")
@@ -379,33 +406,41 @@ def poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata, Inquiry):
                 # --- End Filtering Logic ---
 
                 logging.info(f"  - [PollingThread] Email ID: {email_summary.get('id')} passed filters. Proceeding to process.")
-                # --- Trigger processing --- 
+                # --- Trigger processing ---
                 # Pass dependencies explicitly, including Inquiry
                 process_email_automatically(app, db, Email, ExtractedData, AttachmentMetadata, email_summary)
                 processed_count += 1
                 # ------------------------
 
-                # Update latest timestamp processed *within this batch*
+                # --- Timestamp Update Logic (Moved Inside Loop) ---
+                # Always update latest_processed_timestamp to the timestamp of the *current* email being checked
+                # This ensures we advance past filtered emails
                 try:
-                    received_dt_str = email_summary['receivedDateTime']
-                    if received_dt_str.endswith('Z'):
-                        new_timestamp = datetime.fromisoformat(received_dt_str.replace('Z', '+00:00'))
+                    current_email_received_dt_str = email_summary['receivedDateTime']
+                    if current_email_received_dt_str.endswith('Z'):
+                        current_email_timestamp = datetime.fromisoformat(current_email_received_dt_str.replace('Z', '+00:00'))
                     else:
-                        new_timestamp = datetime.fromisoformat(received_dt_str)
+                        current_email_timestamp = datetime.fromisoformat(current_email_received_dt_str)
 
-                    if new_timestamp > latest_processed_timestamp:
-                        latest_processed_timestamp = new_timestamp
+                    # Update the high water mark for this batch
+                    if current_email_timestamp > latest_processed_timestamp:
+                        latest_processed_timestamp = current_email_timestamp
+                        logging.debug(f"  - [PollingThread] Updated latest_processed_timestamp for batch to: {latest_processed_timestamp.isoformat()}")
 
                 except (KeyError, ValueError, TypeError) as ts_err:
-                    logging.error(f"[PollingThread] Error parsing timestamp from email {email_summary.get('id')}: {ts_err}. Timestamp will not advance based on this email.")
-                    # Don't update timestamp based on this email if parsing failed
+                     logging.error(f"[PollingThread] Error parsing timestamp from email {email_summary.get('id')}: {ts_err}. Timestamp for batch might not advance correctly.")
+                     # Don't update timestamp based on this email if parsing failed, but allow loop to continue
+                # --- End Timestamp Update Logic ---
 
-            # Only advance the timestamp if a newer email was successfully processed
+            # --- Final Timestamp Advancement ---
+            # After checking all emails in the batch, advance the global timestamp 
+            # if the latest checked email timestamp is newer than the starting timestamp.
             if latest_processed_timestamp > last_checked_timestamp:
                 last_checked_timestamp = latest_processed_timestamp
-                logging.info(f"[PollingThread] Advanced last_checked_timestamp to: {last_checked_timestamp.isoformat()}") # Use INFO level
+                logging.info(f"[PollingThread] Advanced global last_checked_timestamp to: {last_checked_timestamp.isoformat()}")
             else:
-                 logging.debug("[PollingThread] No newer emails processed in this batch, timestamp remains unchanged.")
+                logging.debug("[PollingThread] No emails checked in this batch had a timestamp newer than the last global check. Timestamp remains unchanged.")
+            # --------------------------------
             
             logging.info(f"[PollingThread] Batch complete. Processed: {processed_count}, Filtered: {filtered_count}")
 

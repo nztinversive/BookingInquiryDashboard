@@ -13,6 +13,11 @@ from flask_migrate import Migrate # Added Flask-Migrate
 import click # Added click for CLI commands
 from flask.cli import with_appcontext # Added for CLI context
 
+# --- Configure Logging ---
+# Set level to DEBUG to capture detailed filter logs
+logging.basicConfig(level=logging.DEBUG, 
+                    format='%(asctime)s - %(levelname)s - %(name)s - %(threadName)s - %(message)s')
+
 # --- Initialize Extensions ---
 db = SQLAlchemy()
 login_manager = LoginManager()
