@@ -171,7 +171,22 @@
                                 <td>{{ (inquiry.updated_at or inquiry.created_at).strftime('%Y-%m-%d %H:%M') }}</td>
                                 <td>{{ inquiry.primary_email_address or 'N/A' }}</td>
                                 <td>{{ latest_email.subject if latest_email else '(No Subject Found)' }}</td>
-                                <td>{{ inquiry.status | title }}</td> <!-- Display Inquiry status -->
+                                <td class="align-middle text-center text-sm">
+                                    {% set status_lower = inquiry.status | lower %}
+                                    {% if status_lower == 'complete' %}
+                                        <span class="badge bg-success">Complete</span>
+                                    {% elif status_lower == 'incomplete' %}
+                                        <span class="badge bg-warning text-dark">Incomplete</span>
+                                    {% elif status_lower == 'error' or status_lower == 'processing failed' %}
+                                        <span class="badge bg-danger">Error</span>
+                                    {% elif status_lower == 'manually corrected' %}
+                                        <span class="badge bg-secondary">Manually Corrected</span>
+                                    {% elif status_lower == 'new' %}
+                                        <span class="badge bg-info text-dark">New</span>
+                                    {% else %}
+                                        <span class="badge bg-light text-dark">{{ inquiry.status | title }}</span>
+                                    {% endif %}
+                                </td>
                                 <td>
                                     {% if inquiry.extracted_data %}
                                         <span class="text-success"><i class="fas fa-check-circle"></i> Yes</span>
