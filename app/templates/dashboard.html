@@ -227,23 +227,28 @@
         // Only initialize DataTable if the table body has rows
         if ($('#inquiriesTable tbody tr').length > 0) {
             $('#inquiriesTable').DataTable({
-                "order": [[ 0, "desc" ]] // Order by Last Update descending
+                "order": [[ 0, "desc" ]], // Order by Last Update descending
+                // Remove complex draw callback, badges are handled server-side
+                // "drawCallback": function( settings ) {
+                //    console.log( 'DataTables has redrawn the table' );
+                // }
             });
 
-            // --- Status Styling (Needs adjustment for Inquiry statuses) --- 
+            // Remove the old event handler with TODOs
+            /*
             $('#inquiriesTable').on('draw.dt', function () {
                 // TODO: Update these selectors/classes for new inquiry statuses 
                 // (e.g., 'new', 'needs_review', 'quote_generated')
-                $('td:contains("Processed")').filter(function() { /* ... */ }).html('...');
-                $('td:contains("Pending")').filter(function() { /* ... */ }).html('...');
-                $('td:contains("Error")').filter(function() { /* ... */ }).html('...');
-                $('td:contains("Needs_review")').filter(function() { /* ... */ }).html('...');
+                $('td:contains("Processed")').filter(function() { /.../ }).html('...');
+                $('td:contains("Pending")').filter(function() { /.../ }).html('...');
+                $('td:contains("Error")').filter(function() { /.../ }).html('...');
+                $('td:contains("Needs_review")').filter(function() { /.../ }).html('...');
                 
                 // Animation code can remain
-                $('tbody tr').each(function(index) { /* ... */ });
+                $('tbody tr').each(function(index) { /.../ });
             });
-
             $('#inquiriesTable').DataTable().draw(); 
+            */
         } else {
             // Optional: If no rows, maybe hide search/length controls if DataTables adds them even on empty init
             // (This might not be necessary depending on default behavior)
