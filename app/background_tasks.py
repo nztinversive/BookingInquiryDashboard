@@ -360,7 +360,8 @@ def poll_new_emails(app, db, Email, ExtractedData, AttachmentMetadata, Inquiry):
                 POSITIVE_KEYWORDS = ["quote", "request", "trip", "travel", "inquiry", "booking", 
                                        "itinerary", "pricing", "cost", "availability", "destination",
                                        # Added based on examples/discussion
-                                       "cruise", "insurance", "address", "dates", "payment", "information"]
+                                       "cruise", "insurance", "address", "dates", "payment"]
+                                       # Removed "information" as potentially too broad
 
                 try:
                     # Get sender, subject, and body preview for filtering (case-insensitive)
