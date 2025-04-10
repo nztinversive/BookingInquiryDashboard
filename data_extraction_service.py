@@ -108,6 +108,7 @@ def attempt_local_extraction(content):
         "trip_cost": None,
         "email": None,
         "phone_number": None,
+        "trip_destination": None,
         "travelers": []
     }
 
@@ -121,6 +122,8 @@ def attempt_local_extraction(content):
     name_pattern = r'\b(?:Mr|Mrs|Ms|Dr)\.?\s+([A-Z][a-z]+(?:-[A-Z][a-z]+)?)\s+([A-Z][a-z]+(?:-[A-Z][a-z]+)?)\b'
     # Basic address pattern (highly variable, difficult with regex)
     address_pattern = r'\b\d+\s+[A-Za-z0-9\s.,]+(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln)[.,]?\s+[A-Za-z\s]+(?:,)?\s*[A-Z]{2}\s*\d{5}(?:-\d{4})?\b'
+    # Basic destination pattern (very limited)
+    destination_pattern = r'\b(?:traveling|going|trip)\s+to\s+([A-Z][a-zA-Z\s,]+)\b'
 
     try:
         emails = re.findall(email_pattern, content)
@@ -146,6 +149,10 @@ def attempt_local_extraction(content):
 
         addresses = re.findall(address_pattern, content, re.IGNORECASE)
         if addresses: result["home_address"] = addresses[0]
+
+        # Attempt to find destination (simple case)
+        destinations = re.findall(destination_pattern, content, re.IGNORECASE)
+        if destinations: result["trip_destination"] = destinations[0].strip()
 
         names = re.findall(name_pattern, content)
         primary_traveler_added = False
@@ -194,11 +201,12 @@ Your task is to accurately identify and extract the following fields:
 - travel_start_date: Trip start date (try to standardize to YYYY-MM-DD if possible, otherwise use format found)
 - travel_end_date: Trip end date (try to standardize to YYYY-MM-DD if possible, otherwise use format found)
 - trip_cost: The total cost of the trip (numeric value if possible, e.g., 1234.56)
+- trip_destination: The primary destination(s) of the trip (e.g., "Paris, France", "Italy and Greece"). Return as a string.
 - email: Their primary email address
 - phone_number: Their primary phone number
 - travelers: An array containing ALL travelers mentioned (including the primary one). **Crucially, for EACH traveler in this array, include their first_name, last_name, and date_of_birth.** Standardize the date_of_birth to YYYY-MM-DD if possible; otherwise, use the format found. If a specific traveler's DOB is not mentioned, use null for their date_of_birth field.
 
-Look carefully for ALL travelers and their associated dates of birth. Return only a valid JSON object with these exact keys. If a top-level value cannot be found, use null.
+Look carefully for ALL travelers and their associated dates of birth. Return only a valid JSON object with these exact keys. If a top-level value cannot be found, use null. Ensure 'travelers' is an array.
 Be meticulous. Double-check extracted information against the source text. Do not add explanations or fields not requested."""
 
     try:
@@ -237,6 +245,7 @@ Be meticulous. Double-check extracted information against the source text. Do no
 def extract_travel_data(email_body_html):
     """
     Orchestrates data extraction: gets text, runs local, runs OpenAI, merges.
+    Calculates cost per traveler.
     """
     logging.info("Starting travel data extraction process...")
     text_content = get_text_from_html(email_body_html)
@@ -263,7 +272,7 @@ def extract_travel_data(email_body_html):
 
     # 3. Merge Results (Prefer OpenAI for non-null values)
     final_data = local_results.copy()
-    source = 'local' if local_results else 'none'
+    source = 'local' if any(v is not None and v != [] for v in local_results.values()) else 'none'
 
     if openai_results:
         source = 'openai' if source == 'none' else 'combined'
@@ -286,13 +295,40 @@ def extract_travel_data(email_body_html):
         expected_keys = [
             "first_name", "last_name", "home_address", "date_of_birth",
             "travel_start_date", "travel_end_date", "trip_cost", "email",
-            "phone_number", "travelers"
+            "phone_number", "travelers", "trip_destination"
         ]
         for key in expected_keys:
              if key not in final_data:
                  final_data[key] = None
         if "travelers" not in final_data: # Ensure travelers is at least an empty list
             final_data["travelers"] = []
+
+
+    # 4. Calculate Cost Per Traveler
+    cost_per_traveler = None
+    try:
+        raw_cost = final_data.get("trip_cost")
+        travelers = final_data.get("travelers", [])
+        num_travelers = len(travelers) if isinstance(travelers, list) else 0
+
+        if raw_cost and num_travelers > 0:
+            # Attempt to clean and convert cost to float
+            cost_str = str(raw_cost).strip()
+            # Remove common currency symbols and commas
+            cost_str = re.sub(r'[$,€£¥]', '', cost_str)
+            cost_str = cost_str.replace(',', '')
+            cost_numeric = float(cost_str)
+            cost_per_traveler = round(cost_numeric / num_travelers, 2)
+            logging.info(f"Calculated cost per traveler: {cost_per_traveler} ({cost_numeric} / {num_travelers})")
+        elif raw_cost:
+             logging.warning(f"Trip cost '{raw_cost}' found, but number of travelers is 0. Cannot calculate cost per traveler.")
+        # else: cost or travelers missing, handled by initialization
+
+    except (ValueError, TypeError) as calc_err:
+        logging.warning(f"Could not calculate cost per traveler from cost '{raw_cost}': {calc_err}")
+        cost_per_traveler = None # Ensure it's None if calculation fails
+
+    final_data["cost_per_traveler"] = cost_per_traveler
 
 
     logging.info(f"Extraction finished. Source: {source}")
