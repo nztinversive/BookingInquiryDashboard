@@ -129,7 +129,9 @@ def attempt_local_extraction(content):
     # Basic deposit date pattern (looks for dates near keywords)
     deposit_date_pattern = r'(?:deposit|paid|booked)(?: on)?[:\s]*(' + date_pattern + r')' # Uses the existing date pattern
     # Basic origin pattern (very unreliable, likely needs OpenAI)
-    origin_pattern = r'(?:departing|leaving|coming)\s+from\s+([A-Z][a-zA-Z\s,]+)\b'
+    # Updated to look for US states (abbreviations or names) near keywords
+    us_states_pattern = r'(?:Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming|[A-Z]{2})' # Full names or 2-letter caps
+    origin_pattern = r'(?:departing|leaving|coming)\s+from\s+((?:[A-Za-z\s]+,\s*)?' + us_states_pattern + r')' # Optional city/context before state
 
     try:
         emails = re.findall(email_pattern, content)
@@ -170,9 +172,13 @@ def attempt_local_extraction(content):
             actual_date = first_match[0] if isinstance(first_match, tuple) else first_match
             result["initial_trip_deposit_date"] = actual_date.strip()
 
-        # Attempt to find origin (simple case)
-        origins = re.findall(origin_pattern, content, re.IGNORECASE)
-        if origins: result["origin"] = origins[0].strip()
+        # Attempt to find origin (simple case, focusing on US States)
+        origin_matches = re.search(origin_pattern, content, re.IGNORECASE)
+        if origin_matches:
+            # group(1) should capture the optional city + state part
+            actual_origin = origin_matches.group(1)
+            if actual_origin:
+                result["origin"] = actual_origin.strip()
 
         names = re.findall(name_pattern, content)
         primary_traveler_added = False
@@ -225,7 +231,7 @@ Your task is to accurately identify and extract the following fields:
 - email: Their primary email address
 - phone_number: Their primary phone number
 - initial_trip_deposit_date: The date the first payment or deposit for the trip was made (try YYYY-MM-DD, else format found).
-- origin: Where the traveler(s) are departing from for their trip (e.g., "New York, NY", "London, UK").
+- origin: Where the traveler(s) are departing from for their trip. This is typically a US State (e.g., "California", "New York, NY", "FL").
 - travelers: An array containing ALL travelers mentioned (including the primary one). **Crucially, for EACH traveler in this array, include their first_name, last_name, and date_of_birth.** Standardize the date_of_birth to YYYY-MM-DD if possible; otherwise, use the format found. If a specific traveler's DOB is not mentioned, use null for their date_of_birth field.
 
 Look carefully for ALL travelers and their associated dates of birth. Return only a valid JSON object with these exact keys. If a top-level value cannot be found, use null. Ensure 'travelers' is an array.
