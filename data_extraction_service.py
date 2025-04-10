@@ -5,6 +5,7 @@ import logging
 import traceback
 from openai import OpenAI
 from bs4 import BeautifulSoup
+from datetime import datetime, timedelta
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -333,7 +334,36 @@ def extract_travel_data(email_body_html):
             final_data["travelers"] = []
 
 
-    # 4. Calculate Cost Per Traveler
+    # 4. Fallback for Initial Trip Deposit Date
+    if not final_data.get("initial_trip_deposit_date"):
+        start_date_str = final_data.get("travel_start_date")
+        if start_date_str:
+            logging.info(f"Initial deposit date missing. Attempting fallback using start date: {start_date_str}")
+            parsed_start_date = None
+            # Attempt parsing common date formats
+            formats_to_try = ["%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y", "%Y/%m/%d", "%b %d, %Y", "%B %d, %Y"]
+            for fmt in formats_to_try:
+                try:
+                    # Handle potential time components if OpenAI added them
+                    date_only_str = start_date_str.split('T')[0] 
+                    parsed_start_date = datetime.strptime(date_only_str, fmt)
+                    break # Stop on first successful parse
+                except ValueError:
+                    continue # Try next format
+
+            if parsed_start_date:
+                try:
+                    fallback_deposit_date = parsed_start_date - timedelta(days=7)
+                    final_data["initial_trip_deposit_date"] = fallback_deposit_date.strftime("%Y-%m-%d")
+                    logging.info(f"Successfully calculated fallback deposit date: {final_data['initial_trip_deposit_date']}")
+                except Exception as calc_err:
+                    logging.warning(f"Error calculating fallback deposit date from {parsed_start_date}: {calc_err}")
+            else:
+                logging.warning(f"Could not parse travel_start_date '{start_date_str}' to calculate fallback deposit date.")
+        else:
+            logging.info("Initial deposit date missing, and no travel start date found for fallback.")
+
+    # 5. Calculate Cost Per Traveler
     cost_per_traveler = None
     try:
         raw_cost = final_data.get("trip_cost")
