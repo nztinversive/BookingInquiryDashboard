@@ -109,6 +109,8 @@ def attempt_local_extraction(content):
         "email": None,
         "phone_number": None,
         "trip_destination": None,
+        "initial_trip_deposit_date": None,
+        "origin": None,
         "travelers": []
     }
 
@@ -124,6 +126,10 @@ def attempt_local_extraction(content):
     address_pattern = r'\b\d+\s+[A-Za-z0-9\s.,]+(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln)[.,]?\s+[A-Za-z\s]+(?:,)?\s*[A-Z]{2}\s*\d{5}(?:-\d{4})?\b'
     # Basic destination pattern (very limited)
     destination_pattern = r'\b(?:traveling|going|trip)\s+to\s+([A-Z][a-zA-Z\s,]+)\b'
+    # Basic deposit date pattern (looks for dates near keywords)
+    deposit_date_pattern = r'(?:deposit|paid|booked)(?: on)?[:\s]*(' + date_pattern + r')' # Uses the existing date pattern
+    # Basic origin pattern (very unreliable, likely needs OpenAI)
+    origin_pattern = r'(?:departing|leaving|coming)\s+from\s+([A-Z][a-zA-Z\s,]+)\b'
 
     try:
         emails = re.findall(email_pattern, content)
@@ -153,6 +159,20 @@ def attempt_local_extraction(content):
         # Attempt to find destination (simple case)
         destinations = re.findall(destination_pattern, content, re.IGNORECASE)
         if destinations: result["trip_destination"] = destinations[0].strip()
+
+        # Attempt to find initial deposit date
+        deposit_dates = re.findall(deposit_date_pattern, content, re.IGNORECASE)
+        # Findall captures groups within the pattern, hence deposit_dates might be list of tuples/strings depending on date_pattern structure
+        # We need the actual date string captured by the inner date_pattern group
+        if deposit_dates:
+            # Extract the first matched date string (handling potential tuple structure if date_pattern has groups)
+            first_match = deposit_dates[0]
+            actual_date = first_match[0] if isinstance(first_match, tuple) else first_match
+            result["initial_trip_deposit_date"] = actual_date.strip()
+
+        # Attempt to find origin (simple case)
+        origins = re.findall(origin_pattern, content, re.IGNORECASE)
+        if origins: result["origin"] = origins[0].strip()
 
         names = re.findall(name_pattern, content)
         primary_traveler_added = False
@@ -204,6 +224,8 @@ Your task is to accurately identify and extract the following fields:
 - trip_destination: The primary destination(s) of the trip (e.g., "Paris, France", "Italy and Greece"). Return as a string.
 - email: Their primary email address
 - phone_number: Their primary phone number
+- initial_trip_deposit_date: The date the first payment or deposit for the trip was made (try YYYY-MM-DD, else format found).
+- origin: Where the traveler(s) are departing from for their trip (e.g., "New York, NY", "London, UK").
 - travelers: An array containing ALL travelers mentioned (including the primary one). **Crucially, for EACH traveler in this array, include their first_name, last_name, and date_of_birth.** Standardize the date_of_birth to YYYY-MM-DD if possible; otherwise, use the format found. If a specific traveler's DOB is not mentioned, use null for their date_of_birth field.
 
 Look carefully for ALL travelers and their associated dates of birth. Return only a valid JSON object with these exact keys. If a top-level value cannot be found, use null. Ensure 'travelers' is an array.
@@ -295,7 +317,8 @@ def extract_travel_data(email_body_html):
         expected_keys = [
             "first_name", "last_name", "home_address", "date_of_birth",
             "travel_start_date", "travel_end_date", "trip_cost", "email",
-            "phone_number", "travelers", "trip_destination"
+            "phone_number", "travelers", "trip_destination",
+            "initial_trip_deposit_date", "origin"
         ]
         for key in expected_keys:
              if key not in final_data:
