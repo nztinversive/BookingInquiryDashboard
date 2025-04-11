@@ -50,6 +50,21 @@ The application consists of a Flask web server and a background polling process:
 5.  **Web Interface (Flask - `app/__init__.py`, `app/routes.py` - *Assumed*):**
     *   Provides a web UI (details not specified in provided code) to likely display the processed inquiries and their extracted data from the database.
 
+## Technology Stack
+
+*   **Programming Language:** Python 3.x
+*   **Web Framework:** Flask
+*   **Database ORM:** SQLAlchemy (via Flask-SQLAlchemy)
+*   **Database:** PostgreSQL / SQLite (configurable via `DATABASE_URL`)
+*   **External APIs:**
+    *   Microsoft Graph API (for email access)
+    *   OpenAI API (GPT-4o mini for intent classification and data extraction)
+*   **Key Libraries:**
+    *   `requests` (assumed for API calls)
+    *   `beautifulsoup4` (for HTML parsing)
+    *   `python-dotenv` (assumed for environment variables)
+    *   `threading` (for background polling)
+
 ## Setup
 
 *(Details on setting up environment variables, installing dependencies, and running the application would go here. This requires knowing the project structure, dependency files (like `requirements.txt`), and database configuration.)*
