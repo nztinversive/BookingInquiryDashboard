@@ -13,6 +13,9 @@ from flask_migrate import Migrate # Added Flask-Migrate
 import click # Added click for CLI commands
 from flask.cli import with_appcontext # Added for CLI context
 
+# Import config
+from config import config_by_name # Import the config dictionary
+
 # --- Configure Logging ---
 # Set level to DEBUG to capture detailed filter logs
 logging.basicConfig(level=logging.DEBUG, 
@@ -34,21 +37,26 @@ def create_app():
                 static_url_path='/static') # Default, but set explicitly
 
     # --- Configuration ---
-    # Load default config or config from environment variables
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_secret_key') # Use env var or default
-    DATABASE_URL = os.environ.get('DATABASE_URL')
+    # Load configuration based on FLASK_ENV environment variable
+    # Default to 'development' if FLASK_ENV is not set
+    env_name = os.getenv('FLASK_ENV', 'development')
+    try:
+        app.config.from_object(config_by_name[env_name])
+        logging.info(f"Loading configuration for environment: {env_name}")
+    except KeyError:
+        logging.warning(f"Invalid FLASK_ENV value: '{env_name}'. Falling back to default (development) configuration.")
+        app.config.from_object(config_by_name['default'])
 
-    if DATABASE_URL:
-        if DATABASE_URL.startswith("postgres://"):
-            DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-        app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
-        app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {"pool_pre_ping": True}
-        logging.info("Database configured using DATABASE_URL.")
-    else:
-        logging.error("DATABASE_URL secret not found! Database features may be disabled.")
-        # Consider exiting or using a fallback like SQLite for development
-        # app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///default.db'
+    # Log database URI being used (be careful not to log sensitive parts in production logs)
+    db_uri_log = app.config.get('SQLALCHEMY_DATABASE_URI', 'Not Set')
+    if 'sqlite' not in db_uri_log: # Avoid logging full credentials for remote DBs
+        try:
+            from urllib.parse import urlparse
+            parsed_uri = urlparse(db_uri_log)
+            db_uri_log = f"{parsed_uri.scheme}://{parsed_uri.hostname}:{parsed_uri.port}/{parsed_uri.path}" 
+        except Exception:
+            db_uri_log = "[Could not parse DB URI for logging]"
+    logging.info(f"Database URI set to: {db_uri_log}")
 
     # --- Initialize Extensions with App ---
     db.init_app(app)
@@ -70,8 +78,12 @@ def create_app():
         # --- Initialize Database ---
         logging.info("Initializing database tables within app context...")
         try:
-            db.create_all() # Create tables based on models imported by blueprints/routes
-            logging.info("Database tables checked/created.")
+            # Check if DB URI is actually set before trying create_all
+            if app.config.get('SQLALCHEMY_DATABASE_URI'):
+                db.create_all()
+                logging.info("Database tables checked/created.")
+            else:
+                logging.warning("Skipping db.create_all() because SQLALCHEMY_DATABASE_URI is not configured.")
         except Exception as e:
             logging.error(f"Error during database initialization: {e}", exc_info=True)
 
@@ -87,29 +99,46 @@ def create_app():
             # Return user object from the user ID stored in the session
             return User.query.get(int(user_id))
 
-        # --- Start Background Tasks (AFTER app is fully configured) ---
-        # Check MS365 config before starting poller
+        # --- Start Background Tasks (Conditionally) ---
         polling_started = False
-        try:
-            from ms_graph_service import get_ms365_config
-            get_ms365_config() # This will raise ValueError if secrets are missing
-            logging.info("MS365 configuration validated.")
+        # Check if required config exists BEFORE trying to import/start tasks
+        # Use app.config which is now populated from config.py
+        ms_graph_config_ok = all([
+            app.config.get('MS_GRAPH_CLIENT_ID'),
+            app.config.get('MS_GRAPH_CLIENT_SECRET'),
+            app.config.get('MS_GRAPH_TENANT_ID'),
+            app.config.get('MS_GRAPH_MAILBOX_USER_ID')
+        ])
+        openai_config_ok = bool(app.config.get('OPENAI_API_KEY'))
 
-            # Start the background polling thread
-            from .background_tasks import start_background_polling, shutdown_background_polling
-            start_background_polling(app)
-            polling_started = True
-            # Register shutdown hook for graceful termination
-            atexit.register(shutdown_background_polling)
-            logging.info("Registered background task shutdown hook.")
+        if ms_graph_config_ok and openai_config_ok:
+            logging.info("Required MS Graph and OpenAI configurations are present. Attempting to start background tasks...")
+            try:
+                # Import services here, they might depend on config being loaded
+                from ms_graph_service import configure_ms_graph_client # Assuming configure needs to happen once
+                from data_extraction_service import configure_openai_client # Assuming configure needs to happen once
 
-        except ValueError as config_err:
-            logging.error(f"Halting background task startup due to config error: {config_err}")
-        except Exception as startup_err:
-            logging.error(f"Error during background task startup configuration check: {startup_err}", exc_info=True)
+                # Configure clients using app.config
+                configure_ms_graph_client(app.config)
+                configure_openai_client(app.config)
+                logging.info("MS Graph and OpenAI clients configured.")
 
-        if not polling_started:
-            logging.warning("Background email polling thread WAS NOT started due to errors.")
+                # Start the background polling thread
+                from .background_tasks import start_background_polling, shutdown_background_polling
+                start_background_polling(app)
+                polling_started = True
+                atexit.register(shutdown_background_polling)
+                logging.info("Registered background task shutdown hook.")
+
+            except ImportError as import_err:
+                 logging.error(f"Could not import necessary service or task modules: {import_err}")
+            except Exception as startup_err:
+                logging.error(f"Error during background task startup: {startup_err}", exc_info=True)
+        else:
+            missing_configs = []
+            if not ms_graph_config_ok: missing_configs.append("MS Graph")
+            if not openai_config_ok: missing_configs.append("OpenAI")
+            logging.warning(f"Background email polling thread WILL NOT be started due to missing configuration for: {', '.join(missing_configs)}")
 
         # --- Register CLI Commands ---
         register_cli_commands(app)
