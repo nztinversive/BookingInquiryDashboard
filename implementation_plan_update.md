@@ -9,11 +9,11 @@ This document outlines the phased plan to improve the existing email processing 
 **Tasks:**
 
 1.  **Task Queue Implementation:**
-    *   [X] Choose and integrate a task queue system (Celery with Redis).
-    *   [X] Migrate background email polling and processing logic from `threading` to the task queue (`tasks.py`).
-    *   [ ] Configure task workers and monitoring for the queue.
+    *   [x] Choose and integrate a task queue system (Chosen: RQ with Redis).
+    *   [x] Migrate background email polling and processing logic from `threading` to the task queue.
+    *   [x] Configure task workers and monitoring for the queue.
 2.  **Enhanced Error Handling & Resilience:**
-    *   [ ] Implement exponential backoff retries for MS Graph API calls.
+    *   [x] Implement exponential backoff retries for MS Graph API calls.
     *   [ ] Implement exponential backoff retries for OpenAI API calls.
     *   [ ] Define and implement a 'dead-letter' or 'permanently_failed' status for emails that fail repeatedly.
     *   [ ] Add more granular error logging with context (email ID, task ID).

@@ -15,12 +15,6 @@ class Config:
     # Improve connection handling
     SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
 
-    # Celery settings (using Redis)
-    # Read from CELERY_BROKER_URL env var, fallback to local redis
-    CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-    # Read from CELERY_RESULT_BACKEND env var, fallback to local redis
-    CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/1')
-
     # Application specific settings (can be overridden)
     # Add any other default config values here
 

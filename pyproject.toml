@@ -14,6 +14,24 @@ dependencies = [
     "wtforms>=3.2.1",
     "flask-wtf>=1.2.2",
     "sqlalchemy>=2.0.39",
-    "celery>=5.3.6",
-    "redis>=5.0.1",
 ]
+
+[tool.poetry]
+name = "travel-inquiry-processor"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+flask = "*"
+rq = "*"
+redis = "*"
+rq-scheduler = "*"
+tenacity = "*"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

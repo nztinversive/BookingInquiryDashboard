@@ -7,8 +7,35 @@ import base64
 import msal
 import requests
 
+# Tenacity imports for retrying
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from requests.exceptions import RequestException, HTTPError
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# --- Retry Configuration ---
+# Define which exceptions should trigger a retry
+def is_transient_error(exception):
+    """Return True if the exception is a common transient network/server error."""
+    if isinstance(exception, HTTPError):
+        # Retry on common server errors and rate limiting
+        # 429: Too Many Requests (Rate Limiting)
+        # 500: Internal Server Error (might be temporary)
+        # 502: Bad Gateway
+        # 503: Service Unavailable
+        # 504: Gateway Timeout
+        return exception.response.status_code in [429, 500, 502, 503, 504]
+    # Retry on general connection errors, timeouts, etc.
+    return isinstance(exception, RequestException)
+
+# Decorator for retrying Graph API calls
+# Waits 2^x * 1 second between each retry, starting with 1 second, up to 30 seconds, for 5 attempts.
+retry_graph_call = retry(
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=1, max=30),
+    retry=retry_if_exception_type((RequestException, HTTPError)) # Simplified check, could use is_transient_error for more specific codes
+)
 
 # --- Module Level Configuration Store ---
 # This will be populated by configure_ms_graph_client
@@ -91,8 +118,10 @@ def get_access_token():
         logging.debug(traceback.format_exc()) # Log stack trace for debugging
         raise
 
+# Apply retry logic ONLY to the function making the actual network call
+@retry_graph_call
 def _make_graph_api_call(method, endpoint, params=None, json_data=None):
-    """Helper function to make authenticated calls to the Graph API."""
+    """Helper function to make authenticated calls to the Graph API with retry logic."""
     # Check if config is loaded (implicitly checked by get_access_token)
     try:
         token = get_access_token() # This now ensures config is loaded
@@ -102,23 +131,29 @@ def _make_graph_api_call(method, endpoint, params=None, json_data=None):
         }
         logging.debug(f"Making Graph API call: {method} {endpoint} with params: {params}")
         response = requests.request(method, endpoint, headers=headers, params=params, json=json_data)
+        
+        # Log attempt details (useful for retry debugging)
+        attempt_number = _make_graph_api_call.retry.statistics.get('attempt_number', 1)
+        if attempt_number > 1:
+            logging.warning(f"Graph API call attempt {attempt_number} for {method} {endpoint}")
+            
         response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
         logging.debug(f"Graph API call successful: {response.status_code}")
         # Handle potential empty responses for certain status codes like 204
         if response.status_code == 204:
              return None
         return response.json()
-    except requests.exceptions.RequestException as req_err:
-        logging.error(f"Graph API request failed: {req_err}")
-        # Log response body if available for more context
-        if req_err.response is not None:
-            logging.error(f"Response Status: {req_err.response.status_code}")
-            logging.error(f"Response Body: {req_err.response.text}")
-        raise
+    except (RequestException, HTTPError) as req_err:
+        # Log specific error before raising it for tenacity to catch
+        logging.warning(f"Graph API call failed (attempt {_make_graph_api_call.retry.statistics.get('attempt_number', 1)}): {req_err}")
+        if hasattr(req_err, 'response') and req_err.response is not None:
+            logging.warning(f"Response Status: {req_err.response.status_code}, Body: {req_err.response.text[:500]}...") # Log truncated body
+        raise # Re-raise the exception for tenacity to handle retry/stop
     except Exception as e:
-        logging.error(f"Unexpected error during Graph API call: {e}")
+        # Catch other unexpected errors (e.g., JSON decoding, issues in get_access_token)
+        logging.error(f"Unexpected error during Graph API call attempt {_make_graph_api_call.retry.statistics.get('attempt_number', 1)}: {e}")
         logging.debug(traceback.format_exc())
-        raise
+        raise # Re-raise to signal failure
 
 # --- Public API Functions ---
 
@@ -248,4 +283,16 @@ def fetch_attachment_content(email_id, attachment_id):
 
     except Exception as e:
         logging.error(f"Failed to fetch attachment content for {attachment_id}: {e}")
-        return None 
+        return None
+
+# --- Functions for Modifying Email State (Example: Mark as Read) ---
+# Apply retry logic here as well
+@retry_graph_call
+def mark_email_as_read(email_id):
+    # ... (implementation using _make_graph_api_call or direct requests with PATCH) ...
+    pass
+
+@retry_graph_call
+def move_email(email_id, destination_folder_id):
+    # ... (implementation using _make_graph_api_call or direct requests with POST) ...
+    pass 
