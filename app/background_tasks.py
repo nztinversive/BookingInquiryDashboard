@@ -20,18 +20,34 @@ from ms_graph_service import (
 from data_extraction_service import extract_travel_data, classify_email_intent
 
 # --- RQ Setup ---
-# Assumes Redis is running on localhost:6379
-# In a real app, get connection details from config
-redis_conn = Redis()
-email_queue = Queue('email_processing', connection=redis_conn)
+# Get Redis URL from Flask app config
+# Note: This top-level code runs when the module is imported.
+# We need an app context to access config here, which might be tricky.
+# Better approach: Initialize queue inside functions or pass config.
+# Let's try initializing lazily or within functions.
+redis_conn = None
+email_queue = None
 
+def get_redis_conn():
+    """Gets a Redis connection using config from the current app context."""
+    global redis_conn
+    if redis_conn is None:
+        redis_url = current_app.config.get('REDIS_URL', 'redis://localhost:6379/0')
+        redis_conn = Redis.from_url(redis_url)
+    return redis_conn
 
-# --- Background Polling Setup --- (Keep POLL_INTERVAL for now, remove threading items)
-POLL_INTERVAL_SECONDS = 120  # Check every 2 minutes
-last_checked_timestamp = None # Store the timestamp of the last successful check globally (for simplicity)
-# Remove threading event and thread reference
-# stop_polling = threading.Event() # Event to signal thread to stop
-# polling_thread = None # Global reference to the thread
+def get_email_queue():
+    """Gets the RQ email queue instance, initializing connection if needed."""
+    global email_queue
+    if email_queue is None:
+        conn = get_redis_conn()
+        email_queue = Queue('email_processing', connection=conn)
+    return email_queue
+
+# --- Background Polling Setup ---
+# Remove hardcoded interval, it will be read from config where needed
+# POLL_INTERVAL_SECONDS = 120 
+last_checked_timestamp = None 
 
 # Refactored function to be an RQ job
 # Removed app, db, Email, ExtractedData, AttachmentMetadata args
@@ -294,12 +310,12 @@ def poll_new_emails(app):
     It now only requires the app context for logging/config, not for DB operations directly.
     """
     global last_checked_timestamp
-    # Import necessary services and queue here or ensure they are globally accessible
-    # from .background_tasks import email_queue # Already defined above
     from ms_graph_service import fetch_new_emails_since
     from data_extraction_service import classify_email_intent
 
-    # Ensure we have an app context for logging or config if needed
+    # Get queue instance (ensures connection uses app config)
+    current_email_queue = get_email_queue()
+
     with app.app_context():
         logging.info("[EmailPoller] Starting poll cycle.")
         # Determine the timestamp for fetching emails
@@ -335,12 +351,12 @@ def poll_new_emails(app):
                         logging.info(f"[EmailPoller] Classified intent for {email_graph_id}: '{classified_intent}'")
 
                         # --- Enqueue for processing ---
-                        job = email_queue.enqueue(
-                            'app.background_tasks.process_email_job', # Path to the job function
-                            email_summary,                            # Argument 1
-                            classified_intent,                        # Argument 2
+                        job = current_email_queue.enqueue(
+                            'app.background_tasks.process_email_job',
+                            email_summary, 
+                            classified_intent, 
                             job_timeout='10m',
-                            result_ttl=86400
+                            result_ttl=86400 
                         )
                         logging.info(f"[EmailPoller] Enqueued job {job.id} for email {email_graph_id}.")
                         processed_count += 1
@@ -354,7 +370,9 @@ def poll_new_emails(app):
 
             # Update timestamp only after a successful poll (even if no emails found)
             last_checked_timestamp = current_check_time
-            logging.info(f"[EmailPoller] Poll cycle complete. Next check will be after {last_checked_timestamp.isoformat()}")
+            # Read interval from config for logging
+            poll_interval = app.config.get('POLL_INTERVAL_SECONDS', 120)
+            logging.info(f"[EmailPoller] Poll cycle complete. Next check will be after {last_checked_timestamp.isoformat()} (Interval: {poll_interval}s)")
 
         except Exception as poll_err:
             logging.error(f"[EmailPoller] Error during email polling cycle: {poll_err}", exc_info=True)

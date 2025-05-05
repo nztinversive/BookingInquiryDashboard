@@ -6,7 +6,7 @@ from datetime import timedelta
 
 # Import the Flask app and the polling function
 from web_app import app
-from app.background_tasks import poll_new_emails, POLL_INTERVAL_SECONDS
+from app.background_tasks import poll_new_emails
 
 # Ensure Redis connection uses environment variables or default
 redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
@@ -15,9 +15,11 @@ conn = Redis.from_url(redis_url)
 # Create a scheduler instance
 scheduler = Scheduler(connection=conn)
 
-def schedule_polling_job():
-    \"\"\"Schedules the poll_new_emails job if not already scheduled.\"\"\"
-    print(f"Attempting to schedule poll_new_emails every {POLL_INTERVAL_SECONDS} seconds...")
+def schedule_polling_job(app_context):
+    \"\"\"Schedules the poll_new_emails job using interval from app config.\"\"\"
+    # Get interval from config within the app context
+    poll_interval = app_context.config.get('POLL_INTERVAL_SECONDS', 120)
+    print(f"Attempting to schedule poll_new_emails every {poll_interval} seconds...")
     
     # Clear any existing jobs for this function to avoid duplicates if scheduler restarts
     # Note: This might clear jobs scheduled with different intervals/args if the function name is reused.
@@ -28,15 +30,11 @@ def schedule_polling_job():
             scheduler.cancel(job)
 
     # Schedule the job to run periodically
-    # We pass the app instance itself as an argument to poll_new_emails
-    # RQ/Scheduler will serialize what it can, but the worker needs the app context anyway.
-    # The job function itself uses current_app, so passing app might be redundant,
-    # but ensures it works even if run outside a direct Flask request context.
     job = scheduler.schedule(
         scheduled_time=timedelta(seconds=1), # Start almost immediately
         func='app.background_tasks.poll_new_emails', # Path to function
         args=[app], # Pass the app instance as an argument
-        interval=POLL_INTERVAL_SECONDS, # Repeat interval
+        interval=poll_interval, # Use interval from config
         repeat=None, # Repeat indefinitely
         queue_name='default' # Schedule on the default RQ queue (worker will pick it up)
     )
@@ -46,7 +44,7 @@ if __name__ == '__main__':
     # Need app context to ensure config/extensions are loaded if poll_new_emails needs them immediately
     # although the job itself runs within the worker's app context later.
     with app.app_context():
-        schedule_polling_job() # Schedule the job initially
+        schedule_polling_job(app) # Pass app instance to scheduling function
         
         # The rq-scheduler command is typically run separately.
         # This script is mainly for defining and initially scheduling the job.

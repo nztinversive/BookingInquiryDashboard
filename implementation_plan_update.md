@@ -15,15 +15,15 @@ This document outlines the phased plan to improve the existing email processing 
 2.  **Enhanced Error Handling & Resilience:**
     *   [x] Implement exponential backoff retries for MS Graph API calls.
     *   [x] Implement exponential backoff retries for OpenAI API calls.
-    *   [ ] Define and implement a 'dead-letter' or 'permanently_failed' status for emails that fail repeatedly.
+    *   [x] Define and implement a 'dead-letter' or 'permanently_failed' status for emails that fail repeatedly.
     *   [ ] Add more granular error logging with context (email ID, task ID).
 3.  **Dependency Management & Configuration:**
-    *   [ ] Formalize dependencies using Poetry or PDM (`pyproject.toml`).
-    *   [ ] Refactor configuration loading using Flask's standard practices (e.g., `config.py`).
+    *   [x] Formalize dependencies using `requirements.txt`.
+    *   [x] Refactor configuration loading using Flask's standard practices (e.g., `config.py`).
 4.  **Security Hardening (Initial):**
-    *   [ ] Research and select a Secrets Management solution (Vault, Cloud Provider KMS, etc.).
-    *   [ ] Migrate API keys and database credentials to the chosen Secrets Management tool.
-    *   [ ] Review MS Graph API permissions for least privilege.
+    *   [x] Research and select a Secrets Management solution (Chosen: Replit Secrets/Environment Variables for now).
+    *   [-] ~~Migrate API keys and database credentials to the chosen Secrets Management tool.~~ (Skipped for now)
+    *   [-] ~~Review MS Graph API permissions for least privilege.~~ (Skipped for now)
 
 ## Phase 2: WhatsApp Integration - Backend & Core Logic
 

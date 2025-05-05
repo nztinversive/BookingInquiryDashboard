@@ -18,6 +18,10 @@ class Config:
     # Application specific settings (can be overridden)
     # Add any other default config values here
 
+    # RQ/Redis Configuration
+    REDIS_URL = os.environ.get('REDIS_URL') or 'redis://localhost:6379/0'
+    POLL_INTERVAL_SECONDS = int(os.environ.get('POLL_INTERVAL_SECONDS') or 120)
+
 class DevelopmentConfig(Config):
     """Development configuration."""
     DEBUG = True
