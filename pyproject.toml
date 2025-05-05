@@ -14,4 +14,6 @@ dependencies = [
     "wtforms>=3.2.1",
     "flask-wtf>=1.2.2",
     "sqlalchemy>=2.0.39",
+    "celery>=5.3.6",
+    "redis>=5.0.1",
 ]

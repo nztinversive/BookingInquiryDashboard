@@ -3,33 +3,44 @@ import re
 import json
 import logging
 import traceback
-from openai import OpenAI
+from openai import OpenAI, OpenAIError
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- OpenAI Client Initialization ---
+# --- OpenAI Client (initialized by configure_openai_client) ---
 openai_client = None
-try:
-    api_key = os.environ.get("OPEN_API_KEY")
+
+# --- Configuration Function (called from app factory) ---
+def configure_openai_client(config):
+    """Initializes the OpenAI client using API key from Flask app config."""
+    global openai_client
+    api_key = config.get("OPENAI_API_KEY")
     if api_key:
-        openai_client = OpenAI(api_key=api_key)
-        logging.info("OpenAI client initialized successfully.")
+        try:
+            openai_client = OpenAI(api_key=api_key)
+            # Optional: Make a simple test call to ensure the key is valid?
+            # E.g., openai_client.models.list() 
+            # Be mindful of cost/rate limits if doing this.
+            logging.info("OpenAI client initialized successfully.")
+            return True
+        except Exception as e:
+            logging.error(f"Failed to initialize OpenAI client with provided key: {e}", exc_info=True)
+            openai_client = None
+            return False
     else:
-        logging.warning("OPEN_API_KEY secret not found. OpenAI extraction will be disabled.")
-except Exception as e:
-    logging.error(f"Failed to initialize OpenAI client: {e}")
-    openai_client = None
-# --- ---
+        logging.warning("OPENAI_API_KEY not found in configuration. OpenAI features will be disabled.")
+        openai_client = None
+        return False
 
 # --- Intent Classification --- 
 def classify_email_intent(subject, body_preview):
     """Classifies email intent using OpenAI."""
     if not openai_client:
-        logging.warning("OpenAI client not available. Cannot classify intent.")
-        return "unknown" # Default if client fails
+        logging.warning("OpenAI client not available for intent classification.")
+        return "unknown" # Default if client fails or not configured
     if not subject and not body_preview:
         logging.warning("No subject or body preview for intent classification.")
         return "unknown"
@@ -74,10 +85,12 @@ Respond ONLY with the single intent label (e.g., 'inquiry', 'spam', 'solicitatio
             logging.warning(f"OpenAI returned an unexpected intent label: '{intent_label}'. Defaulting to 'other'.")
             return "other"
 
-    except Exception as openai_e:
-        logging.error(f"Error during OpenAI intent classification: {openai_e}", exc_info=True)
-        return "unknown" # Return unknown on error
-# --- ---
+    except OpenAIError as openai_e: # Catch specific OpenAI errors
+        logging.error(f"OpenAI API error during intent classification: {openai_e}", exc_info=False) # Don't need full traceback for API errors usually
+        return "unknown" # Return unknown on API error
+    except Exception as e: # Catch other unexpected errors
+        logging.error(f"Unexpected error during OpenAI intent classification: {e}", exc_info=True)
+        return "unknown"
 
 def get_text_from_html(html_content):
     """Extracts plain text from HTML content."""
@@ -247,27 +260,30 @@ Be meticulous. Double-check extracted information against the source text. Do no
             ],
             response_format={"type": "json_object"},
             temperature=0.2,
-            timeout=90
+            timeout=90 # Longer timeout for potentially complex extraction
         )
-
-        extracted_str = response.choices[0].message.content
-        logging.info("Received response from OpenAI.")
-
-        # Basic validation and parsing
-        if not extracted_str or extracted_str.strip() == '{}':
-             logging.warning("OpenAI returned empty or minimal response.")
+        # Check if response has choices and message content
+        if response.choices and response.choices[0].message and response.choices[0].message.content:
+            extracted_json_str = response.choices[0].message.content
+            logging.debug(f"Raw JSON string from OpenAI: {extracted_json_str}")
+            extracted_data = json.loads(extracted_json_str)
+            logging.info("Successfully extracted data using OpenAI.")
+            return extracted_data
+        else:
+             logging.error("OpenAI response format unexpected or empty.")
+             logging.debug(f"Full OpenAI Response: {response}")
              return None
 
-        ai_extracted_json = json.loads(extracted_str)
-        logging.info("OpenAI extraction successful.")
-        return ai_extracted_json
-
-    except json.JSONDecodeError as json_e:
-        logging.error(f"Failed to parse JSON response from OpenAI: {json_e}")
-        logging.error(f"OpenAI Raw Response: {extracted_str}")
+    except json.JSONDecodeError as json_err:
+        logging.error(f"Failed to decode JSON response from OpenAI: {json_err}")
+        logging.error(f"Invalid JSON string received: {extracted_json_str}")
         return None
-    except Exception as openai_e:
-        logging.error(f"Error during OpenAI extraction: {openai_e}", exc_info=True)
+    except OpenAIError as openai_e: # Catch specific OpenAI errors
+        logging.error(f"OpenAI API error during data extraction: {openai_e}", exc_info=False)
+        return None
+    except Exception as e: # Catch other unexpected errors
+        logging.error(f"Unexpected error during OpenAI data extraction: {e}", exc_info=True)
+        traceback.print_exc() # Print stack trace for unexpected errors
         return None
 
 

@@ -11,3 +11,4 @@ flask-wtf
 sqlalchemy
 werkzeug
 wtforms
+python-dotenv

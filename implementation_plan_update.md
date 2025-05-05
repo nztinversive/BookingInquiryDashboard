@@ -9,8 +9,8 @@ This document outlines the phased plan to improve the existing email processing 
 **Tasks:**
 
 1.  **Task Queue Implementation:**
-    *   [ ] Choose and integrate a task queue system (e.g., Celery with Redis/RabbitMQ, or RQ).
-    *   [ ] Migrate background email polling and processing logic from `threading` to the task queue.
+    *   [X] Choose and integrate a task queue system (Celery with Redis).
+    *   [X] Migrate background email polling and processing logic from `threading` to the task queue (`tasks.py`).
     *   [ ] Configure task workers and monitoring for the queue.
 2.  **Enhanced Error Handling & Resilience:**
     *   [ ] Implement exponential backoff retries for MS Graph API calls.

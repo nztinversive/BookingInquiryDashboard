@@ -99,8 +99,8 @@ def create_app():
             # Return user object from the user ID stored in the session
             return User.query.get(int(user_id))
 
-        # --- Start Background Tasks (Conditionally) ---
-        polling_started = False
+        # --- Start Background Tasks (Conditionally) --- NOW HANDLED BY CELERY BEAT
+        # polling_started = False # Removed
         # Check if required config exists BEFORE trying to import/start tasks
         # Use app.config which is now populated from config.py
         ms_graph_config_ok = all([
@@ -111,8 +111,9 @@ def create_app():
         ])
         openai_config_ok = bool(app.config.get('OPENAI_API_KEY'))
 
+        # Only configure clients here, Celery Beat starts the polling task
         if ms_graph_config_ok and openai_config_ok:
-            logging.info("Required MS Graph and OpenAI configurations are present. Attempting to start background tasks...")
+            logging.info("Required MS Graph and OpenAI configurations are present. Configuring clients...")
             try:
                 # Import services here, they might depend on config being loaded
                 from ms_graph_service import configure_ms_graph_client # Assuming configure needs to happen once
@@ -123,22 +124,24 @@ def create_app():
                 configure_openai_client(app.config)
                 logging.info("MS Graph and OpenAI clients configured.")
 
-                # Start the background polling thread
-                from .background_tasks import start_background_polling, shutdown_background_polling
-                start_background_polling(app)
-                polling_started = True
-                atexit.register(shutdown_background_polling)
-                logging.info("Registered background task shutdown hook.")
+                # -- Removed threading start --
+                # from .background_tasks import start_background_polling, shutdown_background_polling
+                # start_background_polling(app)
+                # polling_started = True
+                # atexit.register(shutdown_background_polling)
+                # logging.info("Registered background task shutdown hook.")
+                # -- End Removed threading start --
+                logging.info("Celery Beat will handle periodic polling task scheduling.")
 
             except ImportError as import_err:
-                 logging.error(f"Could not import necessary service or task modules: {import_err}")
+                 logging.error(f"Could not import necessary service modules for configuration: {import_err}")
             except Exception as startup_err:
-                logging.error(f"Error during background task startup: {startup_err}", exc_info=True)
+                logging.error(f"Error during client configuration: {startup_err}", exc_info=True)
         else:
             missing_configs = []
             if not ms_graph_config_ok: missing_configs.append("MS Graph")
             if not openai_config_ok: missing_configs.append("OpenAI")
-            logging.warning(f"Background email polling thread WILL NOT be started due to missing configuration for: {', '.join(missing_configs)}")
+            logging.warning(f"Celery polling task MAY NOT WORK due to missing configuration for: {', '.join(missing_configs)}")
 
         # --- Register CLI Commands ---
         register_cli_commands(app)

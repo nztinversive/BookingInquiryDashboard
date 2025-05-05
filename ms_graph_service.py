@@ -10,70 +10,92 @@ import requests
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# --- Module Level Configuration Store ---
+# This will be populated by configure_ms_graph_client
+_graph_config = {}
+
 # Store the access token (simple in-memory cache)
 _ms365_token_cache = {
     "token": None,
     "expires_at": 0
 }
 
-def get_ms365_config():
-    """Loads MS365 configuration from environment variables."""
-    config = {
-        "client_id": os.environ.get("MS365_CLIENT_ID"),
-        "client_secret": os.environ.get("MS365_CLIENT_SECRET"),
-        "tenant_id": os.environ.get("MS365_TENANT_ID"),
-        "target_email": os.environ.get("MS365_TARGET_EMAIL")
+# --- Configuration Function (called from app factory) ---
+def configure_ms_graph_client(config):
+    """Loads MS Graph configuration from the Flask app config object."""
+    global _graph_config
+    _graph_config = {
+        "client_id": config.get("MS_GRAPH_CLIENT_ID"),
+        "client_secret": config.get("MS_GRAPH_CLIENT_SECRET"),
+        "tenant_id": config.get("MS_GRAPH_TENANT_ID"),
+        "mailbox_user_id": config.get("MS_GRAPH_MAILBOX_USER_ID") # Mailbox to monitor
     }
-    missing = [key for key, value in config.items() if not value]
+    missing = [key for key, value in _graph_config.items() if not value]
     if missing:
-        raise ValueError(f"Missing MS365 configuration in Replit Secrets: {', '.join(missing)}")
-    return config
+        logging.error(f"MS Graph configuration incomplete. Missing keys: {', '.join(missing)}")
+        # Reset config if incomplete to prevent partial use
+        _graph_config = {}
+        return False
+    else:
+        logging.info("MS Graph client configuration loaded successfully.")
+        return True
+
+# --- Internal Helper Functions ---
+def _ensure_config_loaded():
+    """Checks if the configuration has been loaded."""
+    if not _graph_config:
+        raise RuntimeError("MS Graph client configuration has not been loaded. Call configure_ms_graph_client first.")
+    return True
 
 def get_access_token():
     """Gets a Graph API access token using client credentials, caching it."""
     global _ms365_token_cache
 
+    # Check if config is loaded first
+    _ensure_config_loaded()
+
     # Return cached token if available and not expired (with a small buffer)
     if _ms365_token_cache["token"] and _ms365_token_cache["expires_at"] > time.time() + 60:
-        logging.debug("Using cached MS365 token.")
+        logging.debug("Using cached MS Graph token.")
         return _ms365_token_cache["token"]
 
-    logging.info("Attempting to get new MS365 token...")
+    logging.info("Attempting to get new MS Graph token...")
     try:
-        config = get_ms365_config()
-        authority = f"https://login.microsoftonline.com/{config['tenant_id']}"
+        # Access config from module-level variable
+        authority = f"https://login.microsoftonline.com/{_graph_config['tenant_id']}"
         app = msal.ConfidentialClientApplication(
-            config['client_id'],
+            _graph_config['client_id'],
             authority=authority,
-            client_credential=config['client_secret']
+            client_credential=_graph_config['client_secret']
         )
 
         logging.info("Requesting token with client credentials...")
         result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
 
         if "access_token" in result:
-            logging.info("New MS365 token acquired successfully.")
+            logging.info("New MS Graph token acquired successfully.")
             _ms365_token_cache["token"] = result['access_token']
             _ms365_token_cache["expires_at"] = time.time() + result.get('expires_in', 3599)
             return _ms365_token_cache["token"]
         else:
             error = result.get("error", "Unknown error")
             error_desc = result.get("error_description", "No error description")
-            error_msg = f"MS365 Authentication failed: {error}. {error_desc}"
+            error_msg = f"MS Graph Authentication failed: {error}. {error_desc}"
             logging.error(error_msg)
             raise Exception(error_msg)
-    except ValueError as ve:
-        logging.error(f"Configuration Error: {ve}")
-        raise
+    except KeyError as ke:
+         logging.error(f"Missing configuration key during token acquisition: {ke}")
+         raise RuntimeError(f"Configuration error: Missing key {ke}. Ensure configure_ms_graph_client was called successfully.") from ke
     except Exception as e:
-        logging.error(f"Error getting MS365 token: {e}")
+        logging.error(f"Error getting MS Graph token: {e}")
         logging.debug(traceback.format_exc()) # Log stack trace for debugging
         raise
 
 def _make_graph_api_call(method, endpoint, params=None, json_data=None):
     """Helper function to make authenticated calls to the Graph API."""
+    # Check if config is loaded (implicitly checked by get_access_token)
     try:
-        token = get_access_token()
+        token = get_access_token() # This now ensures config is loaded
         headers = {
             'Authorization': f'Bearer {token}',
             'Content-Type': 'application/json'
@@ -98,12 +120,18 @@ def _make_graph_api_call(method, endpoint, params=None, json_data=None):
         logging.debug(traceback.format_exc())
         raise
 
+# --- Public API Functions ---
+
 def fetch_emails(max_emails=20):
     """Fetches recent emails for the configured target user."""
     logging.info(f"Fetching up to {max_emails} emails...")
     try:
-        config = get_ms365_config()
-        endpoint = f"https://graph.microsoft.com/v1.0/users/{config['target_email']}/messages"
+        _ensure_config_loaded() # Ensure config is loaded
+        target_user = _graph_config.get('mailbox_user_id')
+        if not target_user:
+             raise RuntimeError("Mailbox user ID not configured.")
+
+        endpoint = f"https://graph.microsoft.com/v1.0/users/{target_user}/messages"
         params = {
             '$top': max_emails,
             '$select': 'id,subject,sender,from,toRecipients,receivedDateTime,bodyPreview,hasAttachments,isRead',
@@ -121,8 +149,12 @@ def fetch_email_details(email_id):
     """Fetches full details for a specific email, including the body."""
     logging.info(f"Fetching details for email ID: {email_id}")
     try:
-        config = get_ms365_config()
-        endpoint = f"https://graph.microsoft.com/v1.0/users/{config['target_email']}/messages/{email_id}"
+        _ensure_config_loaded()
+        target_user = _graph_config.get('mailbox_user_id')
+        if not target_user:
+             raise RuntimeError("Mailbox user ID not configured.")
+
+        endpoint = f"https://graph.microsoft.com/v1.0/users/{target_user}/messages/{email_id}"
         params = {
             # Request body in HTML format
             '$select': 'id,subject,from,toRecipients,receivedDateTime,body,hasAttachments'
@@ -138,15 +170,19 @@ def fetch_new_emails_since(timestamp):
     """Fetches emails received after a specific timestamp."""
     logging.info(f"Polling for new emails since: {timestamp.isoformat()}")
     try:
-        config = get_ms365_config()
-        endpoint = f"https://graph.microsoft.com/v1.0/users/{config['target_email']}/messages"
+        _ensure_config_loaded()
+        target_user = _graph_config.get('mailbox_user_id')
+        if not target_user:
+             raise RuntimeError("Mailbox user ID not configured.")
+
+        endpoint = f"https://graph.microsoft.com/v1.0/users/{target_user}/messages"
         # Format timestamp for Graph API filter (ISO 8601 UTC)
         filter_time_str = timestamp.strftime('%Y-%m-%dT%H:%M:%SZ')
         filter_query = f"receivedDateTime gt {filter_time_str}"
 
         params = {
             '$top': 50, # Limit results per poll
-            '$select': 'id,subject,receivedDateTime,isRead,from,bodyPreview', 
+            '$select': 'id,subject,receivedDateTime,isRead,from,bodyPreview', # Added isRead, from, bodyPreview
             '$filter': filter_query,
             '$orderby': 'receivedDateTime asc' # Process oldest first within the new batch
         }
@@ -165,8 +201,12 @@ def fetch_attachments_list(email_id):
     """Fetches the list of attachments for a specific email."""
     logging.info(f"Fetching attachment list for email ID: {email_id}")
     try:
-        config = get_ms365_config()
-        endpoint = f"https://graph.microsoft.com/v1.0/users/{config['target_email']}/messages/{email_id}/attachments"
+        _ensure_config_loaded()
+        target_user = _graph_config.get('mailbox_user_id')
+        if not target_user:
+             raise RuntimeError("Mailbox user ID not configured.")
+
+        endpoint = f"https://graph.microsoft.com/v1.0/users/{target_user}/messages/{email_id}/attachments"
         params = {
             '$select': 'id,name,contentType,size' # Select only metadata
         }
@@ -182,9 +222,13 @@ def fetch_attachment_content(email_id, attachment_id):
     """Fetches the content of a specific attachment."""
     logging.info(f"Fetching content for attachment ID: {attachment_id} from email: {email_id}")
     try:
-        config = get_ms365_config()
+        _ensure_config_loaded()
+        target_user = _graph_config.get('mailbox_user_id')
+        if not target_user:
+             raise RuntimeError("Mailbox user ID not configured.")
+
         # Need to fetch the attachment resource which includes contentBytes
-        endpoint = f"https://graph.microsoft.com/v1.0/users/{config['target_email']}/messages/{email_id}/attachments/{attachment_id}"
+        endpoint = f"https://graph.microsoft.com/v1.0/users/{target_user}/messages/{email_id}/attachments/{attachment_id}"
         # No need for $select if we want the default response which includes contentBytes
         attachment_data = _make_graph_api_call("GET", endpoint)
 
