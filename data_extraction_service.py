@@ -3,12 +3,24 @@ import re
 import json
 import logging
 import traceback
-from openai import OpenAI, OpenAIError
+from openai import OpenAI, OpenAIError, RateLimitError, APITimeoutError, APIConnectionError
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 
+# Tenacity imports
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# --- OpenAI Retry Configuration ---
+# Define which exceptions should trigger a retry for OpenAI
+retry_openai_call = retry(
+    stop=stop_after_attempt(4), # Retry 3 times (4 attempts total)
+    wait=wait_exponential(multiplier=1, min=2, max=30), # Wait 2s, 4s, 8s (max 30s)
+    retry=retry_if_exception_type((RateLimitError, APITimeoutError, APIConnectionError, OpenAIError)) # Retry on rate limits, timeouts, connection errors, and general API errors (like 5xx)
+    # Note: OpenAIError is broad, might catch some non-transient errors. Adjust if needed.
+)
 
 # --- OpenAI Client (initialized by configure_openai_client) ---
 openai_client = None
@@ -36,8 +48,42 @@ def configure_openai_client(config):
         return False
 
 # --- Intent Classification --- 
+@retry_openai_call
+def _call_openai_for_intent(system_message, user_content):
+    """Internal function to make the actual OpenAI call for intent classification, with retry logic."""
+    if not openai_client:
+        raise RuntimeError("OpenAI client not initialized.") # Should not happen if called correctly
+    
+    logging.debug("Making OpenAI call for intent...")
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_content}
+            ],
+            temperature=0.1,
+            max_tokens=20,
+            timeout=30
+        )
+        # Log attempt details (useful for retry debugging)
+        attempt_number = _call_openai_for_intent.retry.statistics.get('attempt_number', 1)
+        if attempt_number > 1:
+            logging.warning(f"OpenAI intent call attempt {attempt_number}")
+            
+        logging.debug("OpenAI intent call successful.")
+        return response.choices[0].message.content.strip().lower()
+    except (RateLimitError, APITimeoutError, APIConnectionError, OpenAIError) as openai_e:
+        attempt_number = _call_openai_for_intent.retry.statistics.get('attempt_number', 1)
+        logging.warning(f"OpenAI intent call failed (attempt {attempt_number}): {openai_e}")
+        raise # Re-raise for tenacity
+    except Exception as e:
+        # Catch other unexpected errors
+        logging.error(f"Unexpected error during OpenAI intent call: {e}", exc_info=True)
+        raise # Re-raise to signal failure
+
 def classify_email_intent(subject, body_preview):
-    """Classifies email intent using OpenAI."""
+    """Classifies email intent using OpenAI (calls internal retry function)."""
     if not openai_client:
         logging.warning("OpenAI client not available for intent classification.")
         return "unknown" # Default if client fails or not configured
@@ -45,7 +91,7 @@ def classify_email_intent(subject, body_preview):
         logging.warning("No subject or body preview for intent classification.")
         return "unknown"
 
-    logging.info("Calling OpenAI API for intent classification...")
+    logging.info("Preparing OpenAI call for intent classification...")
     system_message = """You are an AI assistant classifying emails for a travel insurance agency. 
 Classify the intent of the following email based on its subject and body preview.
 Possible intents are:
@@ -63,18 +109,8 @@ Respond ONLY with the single intent label (e.g., 'inquiry', 'spam', 'solicitatio
     user_content = f"Subject: {subject}\n\nBody Preview (first 100 chars):\n{body_preview[:100]}...\n\nIntent:"
 
     try:
-        response = openai_client.chat.completions.create(
-            model="gpt-4o-mini", # Use a fast and capable model
-            messages=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": user_content}
-            ],
-            temperature=0.1, # Very low temperature for focused classification
-            max_tokens=20, # Limit response length to just the label
-            timeout=30 # Shorter timeout for classification
-        )
-
-        intent_label = response.choices[0].message.content.strip().lower()
+        # Call the internal function that has the retry logic
+        intent_label = _call_openai_for_intent(system_message, user_content)
         logging.info(f"Received intent classification from OpenAI: {intent_label}")
         
         # Basic validation of the label
@@ -85,12 +121,9 @@ Respond ONLY with the single intent label (e.g., 'inquiry', 'spam', 'solicitatio
             logging.warning(f"OpenAI returned an unexpected intent label: '{intent_label}'. Defaulting to 'other'.")
             return "other"
 
-    except OpenAIError as openai_e: # Catch specific OpenAI errors
-        logging.error(f"OpenAI API error during intent classification: {openai_e}", exc_info=False) # Don't need full traceback for API errors usually
-        return "unknown" # Return unknown on API error
-    except Exception as e: # Catch other unexpected errors
-        logging.error(f"Unexpected error during OpenAI intent classification: {e}", exc_info=True)
-        return "unknown"
+    except Exception as e: # Catch exceptions after retries have failed
+        logging.error(f"Failed OpenAI intent classification after retries: {e}", exc_info=False) # Don't need full trace here
+        return "unknown" # Return unknown on final failure
 
 def get_text_from_html(html_content):
     """Extracts plain text from HTML content."""
@@ -221,9 +254,55 @@ def attempt_local_extraction(content):
         # Return partially filled dict or empty dict? Return what we have.
     return result
 
+# Apply retry decorator to the function making the API call for data extraction
+@retry_openai_call
+def _call_openai_for_extraction(system_message, user_content):
+    """Internal function to make the actual OpenAI call for data extraction, with retry logic."""
+    if not openai_client:
+        raise RuntimeError("OpenAI client not initialized.")
+        
+    logging.debug("Making OpenAI call for extraction...")
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o", # Use a more powerful model for structured extraction
+            response_format={ "type": "json_object" }, # Request JSON output
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_content}
+            ],
+            temperature=0.2, # Low temperature for factual extraction
+            max_tokens=1500, # Allow more tokens for potentially larger JSON output
+            timeout=120 # Longer timeout for potentially complex extraction
+        )
+        # Log attempt details
+        attempt_number = _call_openai_for_extraction.retry.statistics.get('attempt_number', 1)
+        if attempt_number > 1:
+            logging.warning(f"OpenAI extraction call attempt {attempt_number}")
+            
+        logging.debug("OpenAI extraction call successful.")
+        # Parse the JSON response
+        extracted_json = json.loads(response.choices[0].message.content)
+        return extracted_json
+    except (RateLimitError, APITimeoutError, APIConnectionError, OpenAIError) as openai_e:
+        attempt_number = _call_openai_for_extraction.retry.statistics.get('attempt_number', 1)
+        logging.warning(f"OpenAI extraction call failed (attempt {attempt_number}): {openai_e}")
+        raise # Re-raise for tenacity
+    except json.JSONDecodeError as json_err:
+        logging.error(f"Failed to decode JSON response from OpenAI: {json_err}")
+        # Log the raw response content for debugging if possible (careful with length)
+        try:
+             raw_content = response.choices[0].message.content
+             logging.error(f"Raw OpenAI response content: {raw_content[:1000]}...")
+        except Exception:
+             logging.error("Could not retrieve raw response content.")
+        raise # Re-raise JSON error as it indicates a problem
+    except Exception as e:
+        # Catch other unexpected errors
+        logging.error(f"Unexpected error during OpenAI extraction call: {e}", exc_info=True)
+        raise # Re-raise to signal failure
 
 def extract_data_with_openai(content):
-    """Extracts travel data using OpenAI API."""
+    """Extracts travel data using OpenAI API (calls internal retry function)."""
     if not openai_client:
         logging.warning("OpenAI client not available. Skipping OpenAI extraction.")
         return None
@@ -231,61 +310,49 @@ def extract_data_with_openai(content):
         logging.warning("No content provided for OpenAI extraction.")
         return None
 
-    logging.info("Calling OpenAI API for data extraction...")
+    logging.info("Preparing OpenAI call for data extraction...")
     system_message = """You are a specialized AI assistant for extracting travel insurance data from emails and documents.
-Your task is to accurately identify and extract the following fields:
-- first_name: The primary traveler's first name
-- last_name: The primary traveler's last name
-- home_address: Their full home address (Street, City, State, Zip)
-- date_of_birth: Primary traveler's date of birth (try to standardize to YYYY-MM-DD if possible, otherwise use format found)
-- travel_start_date: Trip start date (try to standardize to YYYY-MM-DD if possible, otherwise use format found)
-- travel_end_date: Trip end date (try to standardize to YYYY-MM-DD if possible, otherwise use format found)
-- trip_cost: The total cost of the trip (numeric value if possible, e.g., 1234.56)
-- trip_destination: The primary destination(s) of the trip (e.g., "Paris, France", "Italy and Greece"). Return as a string.
-- email: Their primary email address
-- phone_number: Their primary phone number
-- initial_trip_deposit_date: The date the first payment or deposit for the trip was made (try YYYY-MM-DD, else format found).
-- origin: Where the traveler(s) are departing from for their trip. This is typically a US State (e.g., "California", "New York, NY", "FL").
-- travelers: An array containing ALL travelers mentioned (including the primary one). **Crucially, for EACH traveler in this array, include their first_name, last_name, and date_of_birth.** Standardize the date_of_birth to YYYY-MM-DD if possible; otherwise, use the format found. If a specific traveler's DOB is not mentioned, use null for their date_of_birth field.
+Your task is to accurately identify and extract the following fields and return them ONLY as a valid JSON object.
+Fields:
+- first_name: The primary traveler's first name (string or null).
+- last_name: The primary traveler's last name (string or null).
+- home_address: Their full home address (Street, City, State, Zip) (string or null).
+- date_of_birth: Primary traveler's date of birth (standardize to YYYY-MM-DD, string or null).
+- travel_start_date: Trip start date (standardize to YYYY-MM-DD, string or null).
+- travel_end_date: Trip end date (standardize to YYYY-MM-DD, string or null).
+- trip_cost: The total cost of the trip (numeric, e.g., 1234.56 or null).
+- trip_destination: The primary destination(s) (string, e.g., "Paris, France" or null).
+- email: Their primary email address (string or null).
+- phone_number: Their primary phone number (string or null).
+- initial_trip_deposit_date: The date the first payment/deposit was made (standardize YYYY-MM-DD, string or null).
+- origin: Departure location, typically US State (string, e.g., "California", "NY", or null).
+- travelers: An array containing ALL travelers mentioned (including primary). For EACH traveler object in the array, include: first_name (string), last_name (string), date_of_birth (standardize YYYY-MM-DD, string or null). Example: [{"first_name": "John", "last_name": "Doe", "date_of_birth": "1985-03-15"}, {"first_name": "Jane", "last_name": "Doe", "date_of_birth": null}]. If no travelers mentioned, return an empty array [].
 
-Look carefully for ALL travelers and their associated dates of birth. Return only a valid JSON object with these exact keys. If a top-level value cannot be found, use null. Ensure 'travelers' is an array.
-Be meticulous. Double-check extracted information against the source text. Do not add explanations or fields not requested."""
+Return ONLY the JSON object. Do not include explanations or apologies.
+"""
+
+    # Truncate content if it's excessively long to avoid high token usage
+    MAX_CONTENT_LENGTH = 15000 # Adjust as needed (approx ~4k tokens)
+    if len(content) > MAX_CONTENT_LENGTH:
+        logging.warning(f"Content length ({len(content)}) exceeds limit ({MAX_CONTENT_LENGTH}), truncating for OpenAI.")
+        content = content[:MAX_CONTENT_LENGTH] + "... [TRUNCATED]"
+
+    user_content = f"Extract the required data fields from the following text:\n\n---\n{content}\n---"
 
     try:
-        response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": f"Extract the required information from this text:\n\n---\n{content}\n---"}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.2,
-            timeout=90 # Longer timeout for potentially complex extraction
-        )
-        # Check if response has choices and message content
-        if response.choices and response.choices[0].message and response.choices[0].message.content:
-            extracted_json_str = response.choices[0].message.content
-            logging.debug(f"Raw JSON string from OpenAI: {extracted_json_str}")
-            extracted_data = json.loads(extracted_json_str)
-            logging.info("Successfully extracted data using OpenAI.")
+        # Call the internal function with retry logic
+        extracted_data = _call_openai_for_extraction(system_message, user_content)
+        logging.info("Successfully extracted data using OpenAI.")
+        # Basic validation: ensure it's a dictionary
+        if isinstance(extracted_data, dict):
             return extracted_data
         else:
-             logging.error("OpenAI response format unexpected or empty.")
-             logging.debug(f"Full OpenAI Response: {response}")
-             return None
+            logging.error(f"OpenAI returned unexpected data type: {type(extracted_data)}")
+            return None # Indicate failure
 
-    except json.JSONDecodeError as json_err:
-        logging.error(f"Failed to decode JSON response from OpenAI: {json_err}")
-        logging.error(f"Invalid JSON string received: {extracted_json_str}")
-        return None
-    except OpenAIError as openai_e: # Catch specific OpenAI errors
-        logging.error(f"OpenAI API error during data extraction: {openai_e}", exc_info=False)
-        return None
-    except Exception as e: # Catch other unexpected errors
-        logging.error(f"Unexpected error during OpenAI data extraction: {e}", exc_info=True)
-        traceback.print_exc() # Print stack trace for unexpected errors
-        return None
-
+    except Exception as e:
+        logging.error(f"Failed OpenAI data extraction after retries: {e}", exc_info=False) 
+        return None # Return None on final failure
 
 def extract_travel_data(email_body_html):
     """
