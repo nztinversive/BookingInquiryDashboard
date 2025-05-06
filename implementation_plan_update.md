@@ -32,18 +32,18 @@ This document outlines the phased plan to improve the existing email processing 
 **Tasks:**
 
 1.  **WhatsApp Business API Setup:**
-    *   [ ] Choose a WhatsApp Business API provider (Meta direct, Twilio, Vonage, etc.).
-    *   [ ] Obtain necessary API credentials and set up the WhatsApp Business Account.
-    *   [ ] Configure phone number(s) for the service.
+    *   [x] Choose a WhatsApp Business API provider (Chosen: WaAPI).
+    *   [x] Obtain necessary API credentials and set up the WhatsApp Business Account (or WaAPI Instance).
+    *   [x] Configure phone number(s) for the service (within WaAPI).
 2.  **Database Schema Updates:**
-    *   [ ] Design database models for WhatsApp messages (`WhatsAppMessage`).
-    *   [ ] Design relationship between `WhatsAppMessage` and `Inquiry` (or a potential new `Contact` model).
+    *   [x] Design database models for WhatsApp messages (`WhatsAppMessage`).
+    *   [x] Design relationship between `WhatsAppMessage` and `Inquiry`.
     *   [ ] Implement database migrations (e.g., using Flask-Migrate/Alembic).
 3.  **Webhook Implementation:**
-    *   [ ] Create a new Flask endpoint to receive incoming WhatsApp message webhooks.
-    *   [ ] Implement security validation for incoming webhooks (e.g., signature verification).
-    *   [ ] Parse incoming message data (text, media, sender info).
-    *   [ ] Create service logic to find/create the relevant `Inquiry`/`Contact` and save the `WhatsAppMessage` to the database.
+    *   [x] Create a new Flask endpoint to receive incoming WhatsApp message webhooks.
+    *   [x] Implement security validation for incoming webhooks (e.g., signature verification).
+    *   [x] Parse incoming message data (text, media, sender info).
+    *   [x] Create service logic to find/create the relevant `Inquiry`/`Contact` and save the `WhatsAppMessage` to the database.
 4.  **Outgoing Message Service:**
     *   [ ] Develop a service function to send outgoing WhatsApp messages via the chosen API provider.
     *   [ ] Implement basic templating or logic for sending acknowledgments or initial responses (optional).

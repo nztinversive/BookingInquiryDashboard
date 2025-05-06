@@ -22,6 +22,11 @@ class Config:
     REDIS_URL = os.environ.get('REDIS_URL') or 'redis://localhost:6379/0'
     POLL_INTERVAL_SECONDS = int(os.environ.get('POLL_INTERVAL_SECONDS') or 120)
 
+    # WaAPI Configuration
+    WAAPI_API_TOKEN = os.environ.get('WAAPI_API_TOKEN')
+    WAAPI_INSTANCE_ID = os.environ.get('WAAPI_INSTANCE_ID')
+    WAAPI_WEBHOOK_SECRET = os.environ.get('WAAPI_WEBHOOK_SECRET')
+
 class DevelopmentConfig(Config):
     """Development configuration."""
     DEBUG = True
@@ -61,25 +66,23 @@ class ProductionConfig(Config):
     DEBUG = False
     ENV = 'production' # Deprecated in Flask 2.3
 
-    # Enforce essential environment variables in production
-    # Read from SESSION_SECRET env var
-    SECRET_KEY = os.environ['SESSION_SECRET'] # Raises KeyError if not set
-    DATABASE_URL = os.environ['DATABASE_URL'] # Raises KeyError if not set
-    # Read from OPEN_API_KEY env var
-    OPENAI_API_KEY = os.environ['OPEN_API_KEY'] # Raises KeyError if not set
+    # Get essential environment variables using .get() to avoid KeyError at import time
+    SECRET_KEY = os.environ.get('SESSION_SECRET')
+    DATABASE_URL = os.environ.get('DATABASE_URL') 
+    OPENAI_API_KEY = os.environ.get('OPEN_API_KEY') 
 
-    # Ensure correct scheme for SQLAlchemy
-    if DATABASE_URL.startswith("postgres://"):
-        SQLALCHEMY_DATABASE_URI = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-    else:
-         SQLALCHEMY_DATABASE_URI = DATABASE_URL
+    # MS Graph API Credentials
+    MS_GRAPH_CLIENT_ID = os.environ.get('MS365_CLIENT_ID')
+    MS_GRAPH_CLIENT_SECRET = os.environ.get('MS365_CLIENT_SECRET')
+    MS_GRAPH_TENANT_ID = os.environ.get('MS365_TENANT_ID')
+    MS_GRAPH_MAILBOX_USER_ID = os.environ.get('MS365_TARGET_EMAIL')
 
-    # MS Graph API Credentials (Required)
-    # Read from MS365_* env vars
-    MS_GRAPH_CLIENT_ID = os.environ['MS365_CLIENT_ID']
-    MS_GRAPH_CLIENT_SECRET = os.environ['MS365_CLIENT_SECRET']
-    MS_GRAPH_TENANT_ID = os.environ['MS365_TENANT_ID']
-    MS_GRAPH_MAILBOX_USER_ID = os.environ['MS365_TARGET_EMAIL']
+    # WaAPI Configuration
+    WAAPI_API_TOKEN = os.environ.get('WAAPI_API_TOKEN')
+    WAAPI_INSTANCE_ID = os.environ.get('WAAPI_INSTANCE_ID')
+    
+    # Defer database URI processing to app factory
+    SQLALCHEMY_DATABASE_URI = None # Will be set in create_app
 
 
 # Dictionary to easily access config classes by name

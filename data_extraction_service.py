@@ -342,7 +342,7 @@ Return ONLY the JSON object. Do not include explanations or apologies.
     try:
         # Call the internal function with retry logic
         extracted_data = _call_openai_for_extraction(system_message, user_content)
-        logging.info("Successfully extracted data using OpenAI.")
+            logging.info("Successfully extracted data using OpenAI.")
         # Basic validation: ensure it's a dictionary
         if isinstance(extracted_data, dict):
             return extracted_data

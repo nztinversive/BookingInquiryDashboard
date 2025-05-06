@@ -283,7 +283,7 @@ def fetch_attachment_content(email_id, attachment_id):
 
     except Exception as e:
         logging.error(f"Failed to fetch attachment content for {attachment_id}: {e}")
-        return None
+        return None 
 
 # --- Functions for Modifying Email State (Example: Mark as Read) ---
 # Apply retry logic here as well

@@ -319,7 +319,7 @@ def poll_new_emails(app):
     with app.app_context():
         logging.info("[EmailPoller] Starting poll cycle.")
         # Determine the timestamp for fetching emails
-        if last_checked_timestamp is None:
+    if last_checked_timestamp is None:
             # On first run, check for emails from the last hour (or configure differently)
             since_timestamp = datetime.now(timezone.utc) - timedelta(hours=1)
             logging.info("[EmailPoller] First run: checking emails since 1 hour ago.")
@@ -336,7 +336,7 @@ def poll_new_emails(app):
                 logging.info("[EmailPoller] No new emails found.")
             else:
                 logging.info(f"[EmailPoller] Found {len(new_email_summaries)} new email(s). Classifying and enqueueing...")
-                processed_count = 0
+            processed_count = 0
                 for email_summary in new_email_summaries:
                     email_graph_id = email_summary.get('id')
                     email_subject = email_summary.get('subject', '')
@@ -359,8 +359,8 @@ def poll_new_emails(app):
                             result_ttl=86400 
                         )
                         logging.info(f"[EmailPoller] Enqueued job {job.id} for email {email_graph_id}.")
-                        processed_count += 1
-                        # ------------------------
+                processed_count += 1
+                # ------------------------
 
                     except Exception as enqueue_err:
                         logging.error(f"[EmailPoller] Failed to classify or enqueue email {email_graph_id}: {enqueue_err}", exc_info=True)

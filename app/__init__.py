@@ -7,25 +7,20 @@ import json # Added json
 
 # Third-party imports
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager
-from flask_migrate import Migrate # Added Flask-Migrate
 import click # Added click for CLI commands
 from flask.cli import with_appcontext # Added for CLI context
+from .whatsapp_routes import whatsapp_bp
 
 # Import config
 from config import config_by_name # Import the config dictionary
+
+# Import extensions from the new file
+from .extensions import db, login_manager, migrate 
 
 # --- Configure Logging ---
 # Set level to DEBUG to capture detailed filter logs
 logging.basicConfig(level=logging.DEBUG, 
                     format='%(asctime)s - %(levelname)s - %(name)s - %(threadName)s - %(message)s')
-
-# --- Initialize Extensions ---
-db = SQLAlchemy()
-login_manager = LoginManager()
-login_manager.login_view = 'auth.login' # Specify the login view for redirection
-migrate = Migrate() # Initialize Migrate
 
 # --- Application Factory Function ---
 def create_app():
@@ -47,7 +42,44 @@ def create_app():
         logging.warning(f"Invalid FLASK_ENV value: '{env_name}'. Falling back to default (development) configuration.")
         app.config.from_object(config_by_name['default'])
 
-    # Log database URI being used (be careful not to log sensitive parts in production logs)
+    # --- Process and Validate Configuration ---
+    # Process DB URI after loading
+    db_url = app.config.get('DATABASE_URL')
+    if db_url and db_url.startswith("postgres://"):
+        app.config['SQLALCHEMY_DATABASE_URI'] = db_url.replace("postgres://", "postgresql://", 1)
+    elif db_url:
+        app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+    elif app.config.get('ENV') != 'production': # Fallback for non-prod if DATABASE_URL missing
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dev_database.db'
+        logging.warning("DATABASE_URL not set. Using fallback SQLite database: dev_database.db")
+    # Production MUST have DATABASE_URL (checked below)
+
+    # Add checks for required variables in production
+    if app.config.get('ENV') == 'production':
+        required_prod_vars = [
+            'SECRET_KEY', 'DATABASE_URL', 'OPENAI_API_KEY',
+            'MS_GRAPH_CLIENT_ID', 'MS_GRAPH_CLIENT_SECRET', 'MS_GRAPH_TENANT_ID', 'MS_GRAPH_MAILBOX_USER_ID',
+            'WAAPI_API_TOKEN', 'WAAPI_INSTANCE_ID'
+        ]
+        missing_vars = [var for var in required_prod_vars if not app.config.get(var)]
+        if missing_vars:
+            raise ValueError(f"Missing required production environment variables: {', '.join(missing_vars)}")
+        # Also ensure the final DB URI got set
+        if not app.config.get('SQLALCHEMY_DATABASE_URI'):
+             raise ValueError("SQLALCHEMY_DATABASE_URI could not be determined in production.")
+
+    # Add checks for development environment (warnings for optional)
+    elif app.config.get('ENV') == 'development':
+        # Check for optional development dependencies/configs
+        # (DB URL fallback already handled above)
+        if not app.config.get('OPENAI_API_KEY'):
+             logging.warning("OPEN_API_KEY not set. OpenAI features will be disabled.")
+        if not all([app.config.get('MS_GRAPH_CLIENT_ID'), app.config.get('MS_GRAPH_CLIENT_SECRET'), app.config.get('MS_GRAPH_TENANT_ID'), app.config.get('MS_GRAPH_MAILBOX_USER_ID')]):
+             logging.warning("One or more MS Graph environment variables (...) are not set. Email polling will likely fail.")
+        if not all([app.config.get('WAAPI_API_TOKEN'), app.config.get('WAAPI_INSTANCE_ID')]):
+             logging.warning("WAAPI_API_TOKEN or WAAPI_INSTANCE_ID not set. WhatsApp features may be disabled or fail.")
+
+    # Log final database URI being used
     db_uri_log = app.config.get('SQLALCHEMY_DATABASE_URI', 'Not Set')
     if 'sqlite' not in db_uri_log: # Avoid logging full credentials for remote DBs
         try:
@@ -61,18 +93,22 @@ def create_app():
     # --- Initialize Extensions with App ---
     db.init_app(app)
     login_manager.init_app(app)
-    migrate.init_app(app, db) # Initialize Migrate with app and db
+    # Setup login view after initializing
+    login_manager.login_view = 'auth.login' 
+    migrate.init_app(app, db) 
 
     # --- Application Context ---
     with app.app_context():
         # --- Import Blueprints ---
         from . import routes  # Import main application routes
         from .auth import auth_bp # Import authentication blueprint
+        from .whatsapp_routes import whatsapp_bp
         # Import other blueprints as needed
 
         # --- Register Blueprints ---
         app.register_blueprint(routes.main_bp)
         app.register_blueprint(auth_bp, url_prefix='/auth')
+        app.register_blueprint(whatsapp_bp)
         # Register other blueprints
 
         # --- Initialize Database ---

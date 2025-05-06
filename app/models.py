@@ -1,6 +1,6 @@
 from datetime import datetime
 from flask_login import UserMixin, current_user
-from . import db  # Import db from the app package (__init__.py)
+from .extensions import db  # Import db from the extensions package (__init__.py)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
@@ -26,6 +26,7 @@ class Inquiry(db.Model):
 
     emails = db.relationship('Email', backref='inquiry', lazy='dynamic')
     extracted_data = db.relationship('ExtractedData', backref='inquiry', uselist=False, cascade="all, delete-orphan")
+    whatsapp_messages = db.relationship('WhatsAppMessage', backref='inquiry', lazy='dynamic', cascade="all, delete-orphan")
 
     def __repr__(self):
         return f'<Inquiry {self.id} for {self.primary_email_address}>'
@@ -79,4 +80,27 @@ class AttachmentMetadata(db.Model):
     added_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
 
     def __repr__(self):
-        return f'<Attachment {self.name} ({self.graph_id})>' 
+        return f'<Attachment {self.name} ({self.graph_id})>'
+
+class WhatsAppMessage(db.Model):
+    __tablename__ = 'whatsapp_messages'
+
+    id = db.Column(db.String, primary_key=True)
+    inquiry_id = db.Column(db.Integer, db.ForeignKey('inquiries.id'), nullable=True, index=True)
+    wa_chat_id = db.Column(db.String, nullable=False, index=True)
+    sender_number = db.Column(db.String, nullable=True)
+    from_me = db.Column(db.Boolean, default=False, nullable=False)
+    message_type = db.Column(db.String(50), nullable=False)
+    body = db.Column(db.Text, nullable=True)
+    media_url = db.Column(db.String, nullable=True)
+    media_mime_type = db.Column(db.String, nullable=True)
+    media_caption = db.Column(db.Text, nullable=True)
+    media_filename = db.Column(db.String, nullable=True)
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+    location_description = db.Column(db.String, nullable=True)
+    wa_timestamp = db.Column(db.DateTime(timezone=True), nullable=True)
+    received_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f'<WhatsAppMessage {self.id} from {"Me" if self.from_me else self.wa_chat_id}>' 
