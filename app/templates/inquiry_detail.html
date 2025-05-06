@@ -1,232 +1,115 @@
 {% extends "layout.html" %}
 
-{% block title %}Inquiry Details - {{ inquiry.primary_email_address }}{% endblock %}
+{% block title %}Inquiry Detail - {{ inquiry.id }}{% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
-<div class="row mb-4">
-    <div class="col-12">
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb bg-transparent mb-0 pb-0 pt-1 px-0 me-sm-6 me-5">
-                    <li class="breadcrumb-item text-sm"><a class="opacity-5 text-secondary" href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
-                    <li class="breadcrumb-item text-sm text-dark active" aria-current="page">Inquiry Details</li>
-                </ol>
-                <h3 class="font-weight-bolder mb-0">Inquiry #{{ inquiry.id }}</h3>
-            </nav>
-        </div>
-                    </div>
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Inquiry #{{ inquiry.id }}</h2>
+        <a href="{{ url_for('main.dashboard') }}" class="btn btn-sm btn-outline-secondary">Back to Dashboard</a>
+    </div>
 
-    <div class="row">
-        <!-- Inquiry Summary -->
-        <div class="col-lg-5 mb-lg-0 mb-4">
-            <div class="card shadow border-0 h-100">
-                <div class="card-header pb-0 pt-3 bg-transparent card-header-gradient">
-                    <h5 class="mb-0 d-flex align-items-center">
-                        <i class="fas fa-user-circle me-2 text-primary"></i> Contact & Status
-                    </h5>
-                </div>
-                <div class="card-body p-3">
-                    <ul class="list-group list-group-flush">
-                        <li class="list-group-item px-0">
-                            <div class="row align-items-center">
-                                <div class="col-auto">
-                                    <i class="fas fa-envelope text-secondary"></i>
+    {# Display a prominent alert if the Inquiry status indicates an error #}
+    {% if inquiry.status in ['Error', 'Processing Failed'] %}
+    <div class="alert alert-danger" role="alert">
+        <h4 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Processing Issue</h4>
+        <p>This inquiry encountered an issue during processing. The status is currently: <strong>{{ inquiry.status }}</strong>.</p>
+        <hr>
+        <p class="mb-0">Please review the communication timeline below for specific error messages related to emails or other communications. If the issue persists, technical assistance may be required.</p>
+    </div>
+    {% endif %}
+
+    <div class="card mb-4">
+        <div class="card-header">
+            Inquiry Details
+        </div>
+        <div class="card-body">
+            <p><strong>ID:</strong> {{ inquiry.id }}</p>
+            <p><strong>Contact:</strong> {{ inquiry.customer_email if inquiry.customer_email else inquiry.customer_phone }}</p>
+            <p><strong>Status:</strong> <span class="badge bg-info text-dark">{{ inquiry.status }}</span></p>
+            <p><strong>Created At:</strong> {{ inquiry.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+            <p><strong>Last Updated:</strong> {{ inquiry.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+            {% if inquiry.summary %}
+            <p><strong>AI Summary:</strong></p>
+            <pre class="bg-light p-2 rounded">{{ inquiry.summary }}</pre>
+            {% endif %}
+            {% if inquiry.extracted_data %}
+            <p><strong>AI Extracted Data:</strong></p>
+            <div class="d-flex justify-content-between align-items-start">
+                <pre class="bg-light p-2 rounded mb-0 flex-grow-1">{{ inquiry.extracted_data.data | tojson(indent=2) }}</pre>
+                <a href="{{ url_for('main.edit_extracted_data_form', data_id=inquiry.extracted_data.id) }}" class="btn btn-sm btn-outline-primary ms-3">
+                    <i class="fas fa-edit me-1"></i> Edit Data
+                </a>
             </div>
-                                <div class="col">
-                                    <span class="text-sm">Primary Contact:</span>
-                                    <h6 class="mb-0">{{ inquiry.primary_email_address }}</h6>
-                                </div>
-                            </div>
-                        </li>
-                        <li class="list-group-item px-0">
-                            <div class="row align-items-center">
-                                <div class="col-auto">
-                                    <i class="fas fa-info-circle text-secondary"></i>
-                                </div>
-                                <div class="col">
-                                    <span class="text-sm">Inquiry Status:</span>
-                                    <h6 class="mb-0">{{ inquiry.status | title }}</h6>
-                                </div>
-                            </div>
-                        </li>
-                        <li class="list-group-item px-0">
-                            <div class="row align-items-center">
-                                <div class="col-auto">
-                                    <i class="fas fa-clock text-secondary"></i>
-                                </div>
-                                <div class="col">
-                                    <span class="text-sm">Created:</span>
-                                    <h6 class="mb-0">{{ inquiry.created_at.strftime('%Y-%m-%d %H:%M') if inquiry.created_at else 'N/A' }}</h6>
-                                </div>
-                            </div>
-                        </li>
-                        <li class="list-group-item px-0">
-                            <div class="row align-items-center">
-                                <div class="col-auto">
-                                    <i class="fas fa-history text-secondary"></i>
-                                </div>
-                                <div class="col">
-                                    <span class="text-sm">Last Updated:</span>
-                                    <h6 class="mb-0">{{ inquiry.updated_at.strftime('%Y-%m-%d %H:%M') if inquiry.updated_at else 'N/A' }}</h6>
-                                            </div>
-                                        </div>
-                        </li>
-                    </ul>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-        <!-- Extracted Data -->
-        <div class="col-lg-7">
-            <div class="card shadow border-0 h-100">
-                <div class="card-header pb-0 pt-3 bg-transparent card-header-gradient">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0 d-flex align-items-center">
-                            <i class="fas fa-cogs me-2 text-primary"></i> 
-                            Extracted Data 
-                            {# Add indication if data is incomplete #}
-                            {% if inquiry.extracted_data and inquiry.extracted_data.validation_status != 'Complete' %}
-                                <span class="text-warning ms-2">(Incomplete)</span>
-                            {% endif %}
-                        </h5>
-                        {% if inquiry.extracted_data %}
-                        <a href="{{ url_for('main.edit_extracted_data_form', data_id=inquiry.extracted_data.id) }}" class="btn btn-sm btn-outline-secondary">
-                            <i class="fas fa-edit me-1"></i> Edit Data
-                        </a>
-                        {% else %}
-                        <span class="text-muted fst-italic">No data extracted yet.</span>
-                        {% endif %}
-                                        </div>
-                                    </div>
-                <div class="card-body p-3">
-                    {% if inquiry.extracted_data and inquiry.extracted_data.data %}
-                        <dl class="row">
-                            {% for key, value in inquiry.extracted_data.data.items() %}
-                                <dt class="col-sm-4 text-sm text-end pe-0">{{ key | replace('_', ' ') | title }}:</dt>
-                                
-                                {# --- Special handling for Travelers list --- #}
-                                {% if key == 'travelers' and value is iterable and value is not string %}
-                                    <dd class="col-sm-8 text-sm">
-                                        {% if value %}
-                                            <ul class="list-unstyled mb-0">
-                                                {% for traveler in value %}
-                                                    <li>
-                                                        {{ traveler.get('first_name', '?') }} {{ traveler.get('last_name', '?') }}
-                                                        {# Optionally add DOB if available: (DOB: {{ traveler.get('date_of_birth', 'N/A') }}) #}
-                                                    </li>
-                                                {% endfor %}
-                                            </ul>
-                                        {% else %}
-                                            -
-                                        {% endif %}
-                                    </dd>
-                                {# --- Default handling for other keys --- #}
-                                {% else %}
-                                    <dd class="col-sm-8 text-sm">{{ value if value else '-' }}</dd>
-                                {% endif %}
-                            {% endfor %}
-                        </dl>
-                        <hr class="horizontal dark my-2">
-                        {# --- Highlight Validation Status/Missing if not Complete --- #}
-                        {% set is_complete = inquiry.extracted_data and inquiry.extracted_data.validation_status == 'Complete' %}
-                        <div class="row {% if not is_complete %}text-warning{% endif %}">
-                            <div class="col-sm-4 text-sm text-end pe-0 {% if not is_complete %}fw-bold{% endif %}">
-                                {% if not is_complete %}<i class="fas fa-exclamation-triangle me-1"></i>{% endif %}Validation Status:
-                            </div>
-                            <div class="col-sm-8 text-sm {% if not is_complete %}fw-bold{% endif %}">{{ inquiry.extracted_data.validation_status | title if inquiry.extracted_data.validation_status else 'N/A'}}</div>
-                                        </div>
-                         <div class="row {% if not is_complete and inquiry.extracted_data.missing_fields %}text-warning{% endif %}">
-                            <div class="col-sm-4 text-sm text-end pe-0">
-                                Missing Fields:
-                            </div>
-                            {# Format missing fields into a list #}
-                            <div class="col-sm-8 text-sm">
-                                {% if inquiry.extracted_data and inquiry.extracted_data.missing_fields %}
-                                    <ul class="list-unstyled mb-0">
-                                        {% for field in inquiry.extracted_data.missing_fields.split(',') %}
-                                            <li>{{ field | replace('_', ' ') | title }}</li>
-                                        {% endfor %}
-                                    </ul>
-                                {% else %}
-                                    None
-                                {% endif %}
-                                    </div>
-                                            </div>
-                        {# --- End Highlight --- #}
-                        <div class="row">
-                            <div class="col-sm-4 text-sm text-end pe-0">Last Manual Edit:</div>
-                            <div class="col-sm-8 text-sm">
-                                {% if inquiry.extracted_data.updated_by_user %}
-                                    {{ inquiry.extracted_data.updated_at.strftime('%Y-%m-%d %H:%M') if inquiry.extracted_data.updated_at else '' }} by {{ inquiry.extracted_data.updated_by_user.username }}
-                                {% else %}
-                                    Never
-                                {% endif %}
-                                        </div>
-                                    </div>
-                    {% else %}
-                        <p class="text-center text-muted">No extracted data available for this inquiry.</p>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-    <!-- Associated Emails -->
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="card shadow border-0">
-                <div class="card-header pb-0 pt-3 bg-transparent card-header-gradient">
-                     <h5 class="mb-0 d-flex align-items-center">
-                         <i class="fas fa-mail-bulk me-2 text-primary"></i> Associated Emails
-                     </h5>
-                </div>
-                <div class="card-body px-0 pt-0 pb-2">
-                    <div class="table-responsive p-0">
-                        <table class="table align-items-center mb-0">
-                            <thead>
-                                <tr>
-                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Subject</th>
-                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Sender</th>
-                                    <th class="text-center text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Received At</th>
-                                    <th class="text-secondary opacity-7"></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for email in inquiry.emails %}
-                                <tr>
-                                    <td>
-                                        <div class="d-flex px-2 py-1">
-                                            <div class="d-flex flex-column justify-content-center">
-                                                <h6 class="mb-0 text-sm">{{ email.subject if email.subject else '(No Subject)' }}</h6>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <p class="text-xs font-weight-bold mb-0">{{ email.sender_name if email.sender_name else '' }}</p>
-                                        <p class="text-xs text-secondary mb-0">{{ email.sender_address if email.sender_address else '' }}</p>
-                                    </td>
-                                    <td class="align-middle text-center text-sm">
-                                        <span class="text-secondary text-xs font-weight-bold">{{ email.received_at.strftime('%Y-%m-%d %H:%M') if email.received_at else 'N/A' }}</span>
-                                    </td>
-                                    <td class="align-middle">
-                                        {# Optional: Link to raw email view if needed later #}
-                                        {# <a href="{{ url_for('main.email_detail', graph_id=email.graph_id) }}" class="text-secondary font-weight-bold text-xs" data-toggle="tooltip" data-original-title="View Raw Email">
-                                            View Raw
-                                        </a> #}
-                                    </td>
-                                </tr>
-                                {% else %}
-                                <tr>
-                                    <td colspan="4" class="text-center text-muted py-3">No emails associated with this inquiry found.</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+            <p class="mt-2"><small>Validation Status: {{ inquiry.extracted_data.validation_status | title }}</small></p>
+            {% if inquiry.extracted_data.updated_by_user %}
+            <p><small>Last Edited By: {{ inquiry.extracted_data.updated_by_user.username }} at {{ inquiry.extracted_data.updated_at.strftime('%Y-%m-%d %H:%M') }}</small></p>
+            {% endif %}
+            {% else %}
+            <p>No extracted data available for this inquiry yet.</p>
+            {% endif %}
         </div>
     </div>
 
+    <h3 class="mb-3">Communication Timeline</h3>
+
+    {% if timeline %}
+        {% for item in timeline %}
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between">
+                    <span>
+                        {% if item.type == 'email' %}
+                            <i class="fas fa-envelope me-2"></i> Email from: {{ item.sender_email }}
+                        {% elif item.type == 'whatsapp' %}
+                            <i class="fab fa-whatsapp me-2"></i> WhatsApp from: {{ item.sender_phone }}
+                        {% endif %}
+                    </span>
+                    <small class="text-muted">{{ item.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</small>
+                </div>
+                <div class="card-body">
+                    {% if item.type == 'email' %}
+                        <h5 class="card-title">{{ item.subject }}</h5>
+                        <p class="card-text">To: {{ item.recipient_email }}</p>
+                        <hr>
+                        <p><strong>Original Received At:</strong> {{ item.original_received_at.strftime('%Y-%m-%d %H:%M:%S') if item.original_received_at else 'N/A' }}</p>
+                        <pre class="email-body bg-light p-3 rounded">{{ item.body }}</pre>
+                    {% elif item.type == 'whatsapp' %}
+                        <p class="card-text">{{ item.message_body }}</p>
+                        {% if item.media_url %}
+                            <p><a href="{{ item.media_url }}" target="_blank">View Media</a></p>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                {% if item.type == 'email' %}
+                <div class="card-footer text-muted">
+                    Status: {{ item.status }}
+                    {% if item.error_message %}
+                        <span class="text-danger ms-2">Error: {{ item.error_message }}</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>No communications found for this inquiry.</p>
+    {% endif %}
+
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+<style>
+    .email-body {
+        white-space: pre-wrap; /* css-3 */
+        white-space: -moz-pre-wrap; /* Mozilla, since 1999 */
+        white-space: -pre-wrap; /* Opera 4-6 */
+        white-space: -o-pre-wrap; /* Opera 7 */
+        word-wrap: break-word; /* Internet Explorer 5.5+ */
+    }
+    .badge.bg-info { /* More readable status badge */
+        color: #000 !important;
+    }
+</style>
 {% endblock %}

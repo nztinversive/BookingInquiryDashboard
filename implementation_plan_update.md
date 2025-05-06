@@ -62,17 +62,17 @@ This document outlines the phased plan to improve the existing email processing 
 2.  **Inquiry List View:**
     *   [x] Create a dashboard page listing all inquiries.
     *   [x] Display key information (sender/contact, last message timestamp, status, source - Email/WhatsApp).
-    *   [ ] Implement searching and filtering capabilities (by date, status, source, contact info).
+    *   [x] Implement searching and filtering capabilities (by date, status, source, contact info).
 3.  **Inquiry Detail View:**
-    *   [ ] Create a page to show the details of a single inquiry.
-    *   [ ] Display extracted data (from emails or potentially WhatsApp).
-    *   [ ] Display a unified conversation history including both emails and WhatsApp messages in chronological order.
-    *   [ ] Show original email content and associated attachments.
-    *   [ ] Display WhatsApp message content (text, media links).
+    *   [x] Create a page to show the details of a single inquiry.
+    *   [x] Display extracted data (from emails or potentially WhatsApp).
+    *   [x] Display a unified conversation history including both emails and WhatsApp messages in chronological order.
+    *   [~] Show original email content and associated attachments. (Content shown, attachments viewable on separate email detail page)
+    *   [x] Display WhatsApp message content (text, media links).
 4.  **Manual Actions (Optional):**
-    *   [ ] Add functionality for staff to manually edit extracted data.
+    *   [x] Add functionality for staff to manually edit extracted data.
     *   [ ] Add functionality for staff to trigger outgoing WhatsApp messages (e.g., replies).
-    *   [ ] Display processing errors clearly in the UI.
+    *   [x] Display processing errors clearly in the UI.
 
 ## Phase 4: Advanced Features, Optimization & Testing
 

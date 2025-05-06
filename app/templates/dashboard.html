@@ -1,234 +1,255 @@
 {% extends "layout.html" %}
 
-{% block title %}Dashboard - Inquiries{% endblock %}
+{% block title %}Dashboard - Travel Inquiries{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card shadow border-0 card-header-gradient">
-            <div class="card-header">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h2 class="mb-0 d-flex align-items-center">
-                            <i class="fas fa-inbox me-3 text-primary"></i> {# Changed icon #}
-                            Inquiry Dashboard
-                        </h2>
-                        <p class="text-secondary mb-0">Monitor incoming inquiries and status</p>
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h3 class="font-weight-bolder mb-0">Inquiry Dashboard</h3>
+                <div>
+                    {# <a href="{{ url_for('main.export_csv') }}" class="btn btn-sm btn-outline-info me-2"><i class="fas fa-file-csv me-1"></i> Export CSV</a> #}
+                    {# Add other global actions here if needed #}
+                </div>
+            </div>
+            <p class="text-sm mb-0">Overview of all travel inquiries.</p>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-sm-6 mb-xl-0 mb-4">
+            <div class="card shadow border-0">
+                <div class="card-body p-3">
+                    <div class="row">
+                        <div class="col-8">
+                            <div class="numbers">
+                                <p class="text-sm mb-0 text-uppercase font-weight-bold">Total Inquiries</p>
+                                <h5 class="font-weight-bolder mb-0">{{ total_count }}</h5>
+                            </div>
+                        </div>
+                        <div class="col-4 text-end">
+                            <div class="icon icon-shape bg-primary shadow text-center border-radius-md">
+                                <i class="fas fa-folder-open text-lg opacity-10"></i>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="card-body">
-                <!-- Stats Summary -->
-                <div class="row mb-4 fade-in">
-                    <div class="col-md-3 col-sm-6 mb-3 mb-md-0">
-                        <div class="card bg-gradient-primary border-0">
-                            <div class="card-body p-3">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <h5 class="mb-1 text-white">Total Inquiries</h5>
-                                        <h3 class="mb-0 fw-bold">{{ total_count }}</h3>
-                                    </div>
-                                    <div class="icon-shape text-center rounded-circle shadow">
-                                        <i class="fas fa-inbox text-primary"></i>
-                                    </div>
-                                </div>
-                                <div class="mt-3 mb-0">
-                                    <span class="text-white text-sm opacity-8">
-                                        <i class="fas fa-clock me-1"></i> Last updated today
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3 col-sm-6 mb-3 mb-md-0">
-                        <div class="card bg-gradient-success border-0">
-                            <div class="card-body p-3">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <h5 class="mb-1 text-white">Complete</h5>
-                                        <h3 class="mb-0 fw-bold">{{ complete_count }}</h3>
-                                    </div>
-                                    <div class="icon-shape text-center rounded-circle shadow">
-                                        <i class="fas fa-check text-success"></i>
-                                    </div>
-                                </div>
-                                <div class="mt-3 mb-0">
-                                    <span class="text-white text-sm opacity-8">
-                                        <i class="fas fa-chart-line me-1"></i> {{ (complete_count / total_count * 100)|round|int if total_count else 0 }}% of total
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3 col-sm-6 mb-3 mb-md-0">
-                        <div class="card bg-gradient-warning border-0">
-                            <div class="card-body p-3">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <h5 class="mb-1 text-white">Incomplete</h5>
-                                        <h3 class="mb-0 fw-bold">{{ incomplete_count }}</h3>
-                                    </div>
-                                    <div class="icon-shape text-center rounded-circle shadow">
-                                        <i class="fas fa-clock text-warning"></i>
-                                    </div>
-                                </div>
-                                <div class="mt-3 mb-0">
-                                    <span class="text-white text-sm opacity-8">
-                                        <i class="fas fa-chart-line me-1"></i> {{ (incomplete_count / total_count * 100)|round|int if total_count else 0 }}% of total
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3 col-sm-6">
-                        <div class="card bg-gradient-danger border-0">
-                            <div class="card-body p-3">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <h5 class="mb-1 text-white">Errors</h5>
-                                        <h3 class="mb-0 fw-bold">{{ error_count }}</h3>
-                                    </div>
-                                    <div class="icon-shape text-center rounded-circle shadow">
-                                        <i class="fas fa-exclamation-triangle text-danger"></i>
-                                    </div>
-                                </div>
-                                <div class="mt-3 mb-0">
-                                    <span class="text-white text-sm opacity-8">
-                                        <i class="fas fa-chart-line me-1"></i> {{ (error_count / total_count * 100)|round|int if total_count else 0 }}% of total
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {# -- Hide Filters for Demo -- #}
-                {# 
-                <div class="filter-section mb-4 fade-in">
+        </div>
+        <div class="col-xl-3 col-sm-6 mb-xl-0 mb-4">
+            <div class="card shadow border-0">
+                <div class="card-body p-3">
                     <div class="row">
-                        <div class="col-12 mb-3">
-                            <h6 class="text-secondary mb-3">
-                                <i class="fas fa-filter me-2"></i> Filter & Search Options
-                            </h6>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label for="statusFilter" class="form-label small">Status Filter:</label>
-                                <div class="input-group">
-                                    <span class="input-group-text"><i class="fas fa-filter"></i></span>
-                                    <select id="statusFilter" class="form-select">
-                                        <option value="All">All Statuses</option>
-                                        <option value="Complete" {% if status_filter == 'Complete' %}selected{% endif %}>Complete</option>
-                                        <option value="Incomplete" {% if status_filter == 'Incomplete' %}selected{% endif %}>Incomplete</option>
-                                        <option value="Error" {% if status_filter == 'Error' %}selected{% endif %}>Error</option>
-                                    </select>
-                                </div>
+                        <div class="col-8">
+                            <div class="numbers">
+                                <p class="text-sm mb-0 text-uppercase font-weight-bold">Complete / Corrected</p>
+                                <h5 class="font-weight-bolder mb-0">{{ complete_count }}</h5>
                             </div>
                         </div>
-                        <div class="col-md-8">
-                            <div class="form-group">
-                                <label for="searchBox" class="form-label small">Search:</label>
-                                <div class="input-group">
-                                    <span class="input-group-text"><i class="fas fa-search"></i></span>
-                                    <input type="text" id="searchBox" class="form-control" placeholder="Search by name, email, phone..." 
-                                       value="{{ search_query }}">
-                                    <button type="button" id="clearSearch" class="btn btn-outline-secondary">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </div>
-                                <small class="form-text text-secondary mt-1">
-                                    <i class="fas fa-info-circle me-1"></i> Search across all fields including name, email, and phone number
-                                </small>
+                        <div class="col-4 text-end">
+                            <div class="icon icon-shape bg-success shadow text-center border-radius-md">
+                                <i class="fas fa-check-circle text-lg opacity-10"></i>
                             </div>
                         </div>
                     </div>
                 </div>
-                #} 
-                {# -- End Hide Filters -- #}
-
-                <!-- Data Table -->
-                <div class="table-responsive mt-4 fade-in">
-                    <table id="inquiriesTable" class="table table-hover" style="width:100%">
-                        <thead>
-                            <tr>
-                                <th width="15%">Last Update</th> 
-                                <th width="20%">Contact Info</th> {# Renamed #}
-                                <th width="5%">Source</th> {# Added Source Column #}
-                                <th width="30%">Latest Message</th> {# Renamed #}
-                                <th width="15%">Inquiry Status</th>
-                                <th width="10%">Actions</th> {# Removed Data Extracted column #}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- Loop through dashboard items -->
-                            {% for item in dashboard_items %}
-                            {% set inquiry = item.inquiry %}
-                            {% set latest_comm = item.latest_communication %}
-                            {% set comm_type = item.communication_type %}
-                            <tr>
-                                <td>{{ (inquiry.updated_at or inquiry.created_at).strftime('%Y-%m-%d %H:%M') }}</td>
-                                <td>
-                                    {# Display WhatsApp number or Email address #}
-                                    {% if comm_type == 'whatsapp' and latest_comm and latest_comm.sender_number %}
-                                        {{ latest_comm.sender_number }}
-                                    {% else %}
-                                        {{ inquiry.primary_email_address or 'N/A' }}
-                                    {% endif %}
-                                </td>
-                                <td class="text-center">
-                                    {# Display Source Icon #}
-                                    {% if comm_type == 'whatsapp' %}
-                                        <span class="badge bg-success" title="WhatsApp"><i class="fab fa-whatsapp"></i> WA</span>
-                                    {% elif comm_type == 'email' %}
-                                        <span class="badge bg-info text-dark" title="Email"><i class="fas fa-envelope"></i> EM</span>
-                                    {% else %}
-                                        <span class="badge bg-light text-dark">N/A</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {# Display Subject for email, Body snippet for WhatsApp #}
-                                    {% if comm_type == 'email' and latest_comm %}
-                                        {{ latest_comm.subject if latest_comm.subject else '(No Subject)' }}
-                                    {% elif comm_type == 'whatsapp' and latest_comm %}
-                                        {{ (latest_comm.body | striptags | truncate(60)) if latest_comm.body else '(No Text Body)' }} {# Show snippet #}
-                                    {% else %}
-                                        (No messages found)
-                                    {% endif %}
-                                </td>
-                                <td class="align-middle text-center text-sm">
-                                    {# Inquiry status badges remain the same #}
-                                    {% set status_lower = inquiry.status | lower %}
-                                    {% if status_lower == 'complete' %}
-                                        <span class="badge bg-success">Complete</span>
-                                    {% elif status_lower == 'incomplete' %}
-                                        <span class="badge bg-warning text-dark">Incomplete</span>
-                                    {% elif status_lower == 'error' or status_lower == 'processing failed' %}
-                                        <span class="badge bg-danger">Error</span>
-                                    {% elif status_lower == 'manually corrected' %}
-                                        <span class="badge bg-secondary">Manually Corrected</span>
-                                    {% elif status_lower == 'new' or status_lower == 'new_whatsapp' %}
-                                        <span class="badge bg-info text-dark">New</span>
-                                    {% else %}
-                                        <span class="badge bg-light text-dark">{{ inquiry.status | title }}</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <!-- Link to the inquiry detail view -->
-                                    <a href="{{ url_for('main.inquiry_detail', inquiry_id=inquiry.id) }}" class="btn btn-sm btn-outline-primary"> 
-                                        <i class="fas fa-eye me-1"></i> Details
-                                    </a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                    
-                    <!-- Show message if dashboard items list is empty -->
-                    {% if not dashboard_items %}
-                        <div class="text-center p-4">
-                            <p class="text-muted mb-0">No inquiries found.</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-sm-6 mb-xl-0 mb-4">
+            <div class="card shadow border-0">
+                <div class="card-body p-3">
+                    <div class="row">
+                        <div class="col-8">
+                            <div class="numbers">
+                                <p class="text-sm mb-0 text-uppercase font-weight-bold">New / Incomplete</p>
+                                <h5 class="font-weight-bolder mb-0">{{ incomplete_count }}</h5>
+                            </div>
                         </div>
-                    {% endif %}
+                        <div class="col-4 text-end">
+                            <div class="icon icon-shape bg-warning shadow text-center border-radius-md">
+                                <i class="fas fa-hourglass-half text-lg opacity-10"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-sm-6">
+            <div class="card shadow border-0">
+                <div class="card-body p-3">
+                    <div class="row">
+                        <div class="col-8">
+                            <div class="numbers">
+                                <p class="text-sm mb-0 text-uppercase font-weight-bold">Errors / Failed</p>
+                                <h5 class="font-weight-bolder mb-0">{{ error_count }}</h5>
+                            </div>
+                        </div>
+                        <div class="col-4 text-end">
+                            <div class="icon icon-shape bg-danger shadow text-center border-radius-md">
+                                <i class="fas fa-exclamation-triangle text-lg opacity-10"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search and Filter Form -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <form method="GET" action="{{ url_for('main.dashboard') }}" class="card shadow border-0">
+                <div class="card-body">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-5">
+                            <label for="search" class="form-label">Search</label>
+                            <input type="text" name="search" id="search" class="form-control form-control-sm" placeholder="Contact, subject, message..." value="{{ request.args.get('search', '') }}">
+                        </div>
+                        <div class="col-md-5">
+                            <label for="status" class="form-label">Status</label>
+                            <select name="status" id="status" class="form-select form-select-sm">
+                                <option value="">All Statuses</option>
+                                <option value="new" {% if request.args.get('status') == 'new' %}selected{% endif %}>New</option>
+                                <option value="new_whatsapp" {% if request.args.get('status') == 'new_whatsapp' %}selected{% endif %}>New WhatsApp</option>
+                                <option value="Processing" {% if request.args.get('status') == 'Processing' %}selected{% endif %}>Processing</option>
+                                <option value="Incomplete" {% if request.args.get('status') == 'Incomplete' %}selected{% endif %}>Incomplete (AI)</option>
+                                <option value="Complete" {% if request.args.get('status') == 'Complete' %}selected{% endif %}>Complete (AI)</option>
+                                <option value="Manually Corrected" {% if request.args.get('status') == 'Manually Corrected' %}selected{% endif %}>Manually Corrected</option>
+                                <option value="Error" {% if request.args.get('status') == 'Error' %}selected{% endif %}>Error</option>
+                                <option value="Processing Failed" {% if request.args.get('status') == 'Processing Failed' %}selected{% endif %}>Processing Failed</option>
+                                <option value="permanently_failed" {% if request.args.get('status') == 'permanently_failed' %}selected{% endif %}>Permanently Failed (Email)</option> {# This is an email status, but can be filtered #}
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-grid">
+                            <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-filter me-1"></i> Filter</button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Inquiries Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow border-0">
+                <div class="card-header pb-0 pt-3 bg-transparent card-header-gradient">
+                    <h5 class="mb-0 d-flex align-items-center">
+                        <i class="fas fa-list-ul me-2 text-primary"></i> All Inquiries
+                    </h5>
+                </div>
+                <div class="card-body px-0 pt-0 pb-2">
+                    <div class="table-responsive p-0">
+                        {% if dashboard_items %}
+                        <table class="table align-items-center mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Contact</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Source</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Last Message / Snippet</th>
+                                    <th class="text-center text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Status</th>
+                                    <th class="text-center text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Last Update</th>
+                                    <th class="text-secondary opacity-7"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item_data in dashboard_items %}
+                                {% set inquiry = item_data.inquiry %}
+                                {% set latest_comm = item_data.latest_communication %}
+                                {% set comm_type = item_data.communication_type %}
+                                {% set is_error_status = inquiry.status in ['Error', 'Processing Failed', 'permanently_failed'] %}
+                                <tr class="align-middle {% if is_error_status %}table-danger-light{% endif %}">
+                                    <td>
+                                        <div class="d-flex px-2 py-1">
+                                            <div>
+                                                {# Using a generic person icon or based on comm_type #}
+                                                {% if comm_type == 'whatsapp' %}
+                                                    <i class="fab fa-whatsapp fa-lg me-2 align-middle" style="color: #25D366;"></i>
+                                                {% else %}
+                                                    <i class="fas fa-user-circle fa-lg me-2 align-middle text-secondary"></i>
+                                                {% endif %}
+                                            </div>
+                                            <div class="d-flex flex-column justify-content-center">
+                                                <h6 class="mb-0 text-sm">
+                                                    {{ inquiry.customer_email if inquiry.customer_email else inquiry.customer_phone if inquiry.customer_phone else 'N/A' }}
+                                                </h6>
+                                                <p class="text-xs text-secondary mb-0">
+                                                   Inquiry #{{ inquiry.id }}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if comm_type == 'email' and latest_comm %}
+                                            <span class="badge bg-light text-dark"><i class="fas fa-envelope me-1"></i> Email</span>
+                                        {% elif comm_type == 'whatsapp' and latest_comm %}
+                                            <span class="badge bg-light text-dark"><i class="fab fa-whatsapp me-1"></i> WhatsApp</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-secondary">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="align-middle">
+                                        {% if latest_comm %}
+                                            {% if comm_type == 'email' %}
+                                                <p class="text-xs font-weight-bold mb-0" title="{{ latest_comm.subject if latest_comm.subject else '' }}">
+                                                    {{ (latest_comm.subject if latest_comm.subject else '(No Subject)') | truncate(60) }}
+                                                </p>
+                                                <p class="text-xs text-secondary mb-0" title="{{ latest_comm.body if latest_comm.body else '' }}">
+                                                    {{ (latest_comm.body if latest_comm.body else '(No Body)') | truncate(80) }}
+                                                </p>
+                                            {% elif comm_type == 'whatsapp' %}
+                                                <p class="text-xs font-weight-bold mb-0">
+                                                    {{ (latest_comm.body if latest_comm.body else '(No Text Content)') | truncate(60) }}
+                                                </p>
+                                                {% if latest_comm.media_url %}
+                                                    <p class="text-xs text-secondary mb-0"><i class="fas fa-paperclip"></i> Media Attached</p>
+                                                {% endif %}
+                                            {% endif %}
+                                        {% else %}
+                                            <p class="text-xs text-muted mb-0 fst-italic">No communications yet.</p>
+                                        {% endif %}
+                                    </td>
+                                    <td class="align-middle text-center text-sm">
+                                        {% set status_badge_class = 'bg-secondary' %}
+                                        {% if inquiry.status == 'new' or inquiry.status == 'new_whatsapp' %}
+                                            {% set status_badge_class = 'bg-primary' %}
+                                        {% elif inquiry.status == 'Processing' %}
+                                            {% set status_badge_class = 'bg-info text-dark' %}
+                                        {% elif inquiry.status == 'Incomplete' %}
+                                            {% set status_badge_class = 'bg-warning text-dark' %}
+                                        {% elif inquiry.status == 'Complete' or inquiry.status == 'Manually Corrected' %}
+                                            {% set status_badge_class = 'bg-success' %}
+                                        {% elif inquiry.status == 'Error' or inquiry.status == 'Processing Failed' or inquiry.status == 'permanently_failed' %}
+                                            {% set status_badge_class = 'bg-danger' %}
+                                        {% endif %}
+                                        <span class="badge {{ status_badge_class }}">{{ inquiry.status | title }}</span>
+                                    </td>
+                                    <td class="align-middle text-center">
+                                        <span class="text-secondary text-xs font-weight-bold">
+                                            {{ inquiry.updated_at.strftime('%Y-%m-%d %H:%M') if inquiry.updated_at else (inquiry.created_at.strftime('%Y-%m-%d %H:%M') if inquiry.created_at else 'N/A') }}
+                                        </span>
+                                    </td>
+                                    <td class="align-middle">
+                                        <a href="{{ url_for('main.inquiry_detail', inquiry_id=inquiry.id) }}" class="btn btn-sm btn-outline-primary mb-0" data-bs-toggle="tooltip" data-bs-placement="top" title="View Details">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% else %}
+                            <div class="text-center py-5">
+                                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                                <p class="text-muted">No inquiries found matching your criteria.</p>
+                                {% if not request.args.get('search') and not request.args.get('status') %}
+                                    <p class="text-sm text-muted">Try seeding sample data if this is a new setup: <code class="bg-light p-1 rounded">flask seed-sample</code></p>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -237,41 +258,21 @@
 {% endblock %}
 
 {% block scripts %}
-<!-- Link to DataTables CSS/JS should be in layout.html -->
-<!-- We don't need the dashboard.js specific to the old inquiry structure anymore for basic display -->
-<!-- <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script> -->
+{{ super() }}
+<style>
+.table-danger-light {
+    background-color: #f8d7da !important; /* Light red background for error rows */
+    /* You might want to ensure text color is still readable, or adjust further */
+}
+.badge.bg-info, .badge.bg-warning { /* More readable status badges for light backgrounds */
+    color: #000 !important;
+}
+</style>
 <script>
-    // Basic DataTables initialization (can be enhanced later)
-    $(document).ready(function() {
-        // Only initialize DataTable if the table body has rows
-        if ($('#inquiriesTable tbody tr').length > 0) {
-            $('#inquiriesTable').DataTable({
-                "order": [[ 0, "desc" ]], // Order by Last Update descending
-                // Remove complex draw callback, badges are handled server-side
-                // "drawCallback": function( settings ) {
-                //    console.log( 'DataTables has redrawn the table' );
-                // }
-            });
-
-            // Remove the old event handler with TODOs
-            /*
-            $('#inquiriesTable').on('draw.dt', function () {
-                // TODO: Update these selectors/classes for new inquiry statuses 
-                // (e.g., 'new', 'needs_review', 'quote_generated')
-                $('td:contains("Processed")').filter(function() { /.../ }).html('...');
-                $('td:contains("Pending")').filter(function() { /.../ }).html('...');
-                $('td:contains("Error")').filter(function() { /.../ }).html('...');
-                $('td:contains("Needs_review")').filter(function() { /.../ }).html('...');
-                
-                // Animation code can remain
-                $('tbody tr').each(function(index) { /.../ });
-            });
-            $('#inquiriesTable').DataTable().draw(); 
-            */
-        } else {
-            // Optional: If no rows, maybe hide search/length controls if DataTables adds them even on empty init
-            // (This might not be necessary depending on default behavior)
-        }
-    });
+    // Initialize Bootstrap tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    })
 </script>
 {% endblock %}

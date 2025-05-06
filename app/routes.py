@@ -2,9 +2,12 @@ from flask import Blueprint, render_template, current_app, Response, abort, url_
 from flask_login import login_required, current_user
 from sqlalchemy.exc import SQLAlchemyError # Import specific exception
 from sqlalchemy.orm import joinedload, selectinload # Added selectinload
+from sqlalchemy import or_ # Import or_ for search
 from .models import Email, ExtractedData, User, Inquiry, WhatsAppMessage # Added WhatsAppMessage model
 from . import db # Import the db object
 import json # Import json for potential type casting
+from operator import attrgetter # Import attrgetter for sorting
+from datetime import timezone # Import timezone for naive datetime comparison
 
 # Create a Blueprint for the main application routes
 # Remove explicit static_folder here to rely on app-level static handling
@@ -15,11 +18,40 @@ main_bp = Blueprint('main', __name__,
 @main_bp.route('/dashboard') # Add specific dashboard route if needed
 @login_required # Assuming dashboard requires login
 def dashboard():
-    """Render the main dashboard page, showing unified inquiries."""
+    """Render the main dashboard page, showing unified inquiries with filtering."""
     try:
-        inquiries = Inquiry.query.options(
-            joinedload(Inquiry.extracted_data)
-        ).order_by(Inquiry.updated_at.desc(), Inquiry.created_at.desc()).all()
+        # Get filter parameters from request arguments
+        status_filter = request.args.get('status', default=None, type=str)
+        search_query = request.args.get('search', default=None, type=str)
+
+        # Base query
+        query = Inquiry.query.options(joinedload(Inquiry.extracted_data))
+
+        # Apply status filter
+        if status_filter:
+            query = query.filter(Inquiry.status == status_filter)
+
+        # Apply search filter (across multiple fields)
+        if search_query:
+            search_term = f"%{search_query}%"
+            query = query.join(Inquiry.emails, isouter=True) # Outer join to include inquiries with no emails
+            query = query.join(Inquiry.whatsapp_messages, isouter=True) # Outer join for WhatsApp messages
+            
+            query = query.filter(
+                or_(
+                    Inquiry.primary_email_address.ilike(search_term), 
+                    Email.subject.ilike(search_term), 
+                    Email.sender_address.ilike(search_term),
+                    WhatsAppMessage.body.ilike(search_term),
+                    WhatsAppMessage.sender_number.ilike(search_term),
+                    # Add search on extracted data fields if needed (requires JSONB functions or careful casting)
+                    # ExtractedData.data['first_name'].astext.ilike(search_term) # Example (PostgreSQL specific)
+                )
+            ).distinct() # Use distinct because joins might create duplicate inquiries
+
+        # Apply final ordering and execute query
+        inquiries = query.order_by(Inquiry.updated_at.desc(), Inquiry.created_at.desc()).all()
+
     except Exception as e:
         current_app.logger.error(f"Error fetching inquiries for dashboard: {e}", exc_info=True)
         inquiries = []
@@ -65,13 +97,18 @@ def dashboard():
             'communication_type': latest_comm_type
         })
 
+    # Pass filter values back to the template if needed for other JS logic
     return render_template('dashboard.html', 
                            user=current_user, 
                            dashboard_items=dashboard_data, # Renamed variable for clarity
                            total_count=total_count,
                            complete_count=complete_count,
                            incomplete_count=incomplete_count,
-                           error_count=error_count
+                           error_count=error_count,
+                           # Pass current filters back to potentially pre-fill or use in JS
+                           # request.args already accessible in template, so not strictly needed here
+                           # status_filter=status_filter,
+                           # search_query=search_query 
                            )
 
 # Add other main routes for your dashboard here
@@ -224,20 +261,56 @@ def update_extracted_data(data_id):
 @main_bp.route('/inquiry/<int:inquiry_id>')
 @login_required
 def inquiry_detail(inquiry_id):
-    """Show details for a specific Inquiry, its data, and associated emails."""
+    """Show details for a specific Inquiry, its data, and unified conversation history."""
     try:
         # Query for the inquiry, eagerly load extracted data
-        # We can't eager load 'emails' because it's a dynamic relationship
         inquiry = Inquiry.query.options(
             joinedload(Inquiry.extracted_data)
-            # selectinload(Inquiry.emails) # REMOVED: Incompatible with lazy='dynamic'
         ).get_or_404(inquiry_id)
 
-    except Exception as e:
-        # Log unexpected errors during query
-        current_app.logger.error(f"Error fetching inquiry details for inquiry_id {inquiry_id}: {e}")
-        abort(500, description="Error retrieving inquiry details.") # Internal server error
+        # Fetch associated communications
+        emails = inquiry.emails.order_by(Email.received_at.asc()).all()
+        whatsapp_messages = inquiry.whatsapp_messages.order_by(WhatsAppMessage.received_at.asc()).all()
 
-    # Render a new template, passing the inquiry object
-    return render_template('inquiry_detail.html', inquiry=inquiry, user=current_user)
+        # Combine and sort communications into a single timeline
+        timeline = []
+        for email in emails:
+            # Ensure timestamp is timezone-aware (assuming UTC if naive)
+            ts = email.received_at
+            if ts and ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            timeline.append({'type': 'email', 'data': email, 'timestamp': ts})
+            
+        for msg in whatsapp_messages:
+            # Compare using received_at (when webhook was received)
+            # Or use wa_timestamp if available and reliable?
+            ts = msg.received_at 
+            if ts and ts.tzinfo is None:
+                 ts = ts.replace(tzinfo=timezone.utc)
+            # Use wa_timestamp if received_at is missing and wa_timestamp exists
+            if ts is None and msg.wa_timestamp:
+                 ts = msg.wa_timestamp
+                 if ts and ts.tzinfo is None:
+                      ts = ts.replace(tzinfo=timezone.utc)
+                     
+            # Fallback if no timestamp
+            if ts is None:
+                 ts = inquiry.created_at # Or some other default
+                 if ts and ts.tzinfo is None:
+                      ts = ts.replace(tzinfo=timezone.utc)
+                     
+            timeline.append({'type': 'whatsapp', 'data': msg, 'timestamp': ts})
+
+        # Sort the combined timeline by timestamp
+        timeline.sort(key=lambda item: item['timestamp'] or datetime.min.replace(tzinfo=timezone.utc)) # Handle potential None timestamps
+
+    except Exception as e:
+        current_app.logger.error(f"Error fetching details for inquiry_id {inquiry_id}: {e}", exc_info=True)
+        abort(500, description="Error retrieving inquiry details.")
+
+    # Pass the inquiry object and the sorted timeline to the template
+    return render_template('inquiry_detail.html', 
+                           inquiry=inquiry, 
+                           timeline=timeline, # Pass the unified timeline
+                           user=current_user)
 # --- End Inquiry Detail Route --- 

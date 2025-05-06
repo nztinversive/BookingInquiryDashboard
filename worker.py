@@ -35,7 +35,7 @@ def handle_failed_job(job, connection, type, value, tb):
         ctx.push()
         try:
             from app import db
-            from app.models import Email
+            from app.models import Email, Inquiry
 
             email_record = db.session.get(Email, email_graph_id)
             if email_record:
@@ -45,6 +45,24 @@ def handle_failed_job(job, connection, type, value, tb):
                 error_details = f"{type.__name__}: {value}\n{traceback.format_exc(limit=5)}" # Limit traceback length
                 email_record.processing_error = error_details[:2000] # Limit DB field size
                 email_record.processed_at = datetime.now(timezone.utc)
+                
+                # Update associated Inquiry status if not already an error state
+                if email_record.inquiry_id:
+                    inquiry = db.session.get(Inquiry, email_record.inquiry_id)
+                    if inquiry:
+                        # Only update if not already in a more specific error or completed state
+                        # For instance, if it was already 'Manually Corrected', don't revert to 'Processing Failed'
+                        # unless that's desired behavior.
+                        # Let's assume for now we mark it as 'Processing Failed' regardless if an email fails.
+                        # More complex logic could be added here.
+                        logger.info(f"Updating Inquiry {inquiry.id} status to 'Processing Failed' due to email failure.")
+                        inquiry.status = 'Processing Failed'
+                        # inquiry.updated_at will be updated automatically due to onupdate=func.now()
+                    else:
+                        logger.warning(f"Could not find Inquiry {email_record.inquiry_id} to update its status.")
+                else:
+                    logger.warning(f"Email {email_graph_id} is not associated with an Inquiry. Cannot update Inquiry status.")
+
                 db.session.commit()
                 logger.info(f"Successfully marked Email {email_graph_id} as failed.")
             else:
