@@ -45,10 +45,10 @@ This document outlines the phased plan to improve the existing email processing 
     *   [x] Parse incoming message data (text, media, sender info).
     *   [x] Create service logic to find/create the relevant `Inquiry`/`Contact` and save the `WhatsAppMessage` to the database.
 4.  **Outgoing Message Service:**
-    *   [ ] Develop a service function to send outgoing WhatsApp messages via the chosen API provider.
-    *   [ ] Implement basic templating or logic for sending acknowledgments or initial responses (optional).
+    *   [-] ~~Develop a service function to send outgoing WhatsApp messages via the chosen API provider.~~ (Skipped for now)
+    *   [-] ~~Implement basic templating or logic for sending acknowledgments or initial responses (optional).~~ (Skipped for now)
 5.  **Integration with Task Queue:**
-    *   [ ] (Optional) Offload any heavy processing related to incoming WhatsApp messages (e.g., complex lookups, OpenAI calls) to the task queue established in Phase 1.
+    *   [-] ~~(Optional) Offload any heavy processing related to incoming WhatsApp messages (e.g., complex lookups, OpenAI calls) to the task queue established in Phase 1.~~ (Skipped for now)
 
 ## Phase 3: Unified Dashboard & Frontend Development
 
@@ -57,11 +57,11 @@ This document outlines the phased plan to improve the existing email processing 
 **Tasks:**
 
 1.  **Core UI Structure:**
-    *   [ ] Set up base Flask templates and static files.
-    *   [ ] Implement user authentication/authorization for staff access.
+    *   [x] Set up base Flask templates and static files.
+    *   [x] Implement user authentication/authorization for staff access.
 2.  **Inquiry List View:**
-    *   [ ] Create a dashboard page listing all inquiries.
-    *   [ ] Display key information (sender/contact, last message timestamp, status, source - Email/WhatsApp).
+    *   [x] Create a dashboard page listing all inquiries.
+    *   [x] Display key information (sender/contact, last message timestamp, status, source - Email/WhatsApp).
     *   [ ] Implement searching and filtering capabilities (by date, status, source, contact info).
 3.  **Inquiry Detail View:**
     *   [ ] Create a page to show the details of a single inquiry.

@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block title %}Dashboard - Email Processing{% endblock %}
+{% block title %}Dashboard - Inquiries{% endblock %}
 
 {% block content %}
 <div class="row mb-4">
@@ -10,10 +10,10 @@
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <h2 class="mb-0 d-flex align-items-center">
-                            <i class="fas fa-envelope-open-text me-3 text-primary"></i>
-                            Email Processing Dashboard
+                            <i class="fas fa-inbox me-3 text-primary"></i> {# Changed icon #}
+                            Inquiry Dashboard
                         </h2>
-                        <p class="text-secondary mb-0">Monitor incoming emails and extraction status</p>
+                        <p class="text-secondary mb-0">Monitor incoming inquiries and status</p>
                     </div>
                 </div>
             </div>
@@ -151,26 +151,52 @@
                     <table id="inquiriesTable" class="table table-hover" style="width:100%">
                         <thead>
                             <tr>
-                                <!-- Adjust columns slightly for Inquiry context -->
-                                <th width="15%">Last Update</th> <!-- Changed from Received At -->
-                                <th width="20%">Primary Contact</th> <!-- Changed from Sender -->
-                                <th width="30%">Subject (Latest)</th> <!-- Changed from Subject -->
-                                <th width="15%">Inquiry Status</th> <!-- Changed from Processing Status -->
-                                <th width="10%">Data Extracted?</th>
-                                <th width="10%">Actions</th>
+                                <th width="15%">Last Update</th> 
+                                <th width="20%">Contact Info</th> {# Renamed #}
+                                <th width="5%">Source</th> {# Added Source Column #}
+                                <th width="30%">Latest Message</th> {# Renamed #}
+                                <th width="15%">Inquiry Status</th>
+                                <th width="10%">Actions</th> {# Removed Data Extracted column #}
                             </tr>
                         </thead>
                         <tbody>
                             <!-- Loop through dashboard items -->
                             {% for item in dashboard_items %}
-                            {# Access inquiry and latest_email from the item dictionary #}
                             {% set inquiry = item.inquiry %}
-                            {% set latest_email = item.latest_email %}
+                            {% set latest_comm = item.latest_communication %}
+                            {% set comm_type = item.communication_type %}
                             <tr>
                                 <td>{{ (inquiry.updated_at or inquiry.created_at).strftime('%Y-%m-%d %H:%M') }}</td>
-                                <td>{{ inquiry.primary_email_address or 'N/A' }}</td>
-                                <td>{{ latest_email.subject if latest_email else '(No Subject Found)' }}</td>
+                                <td>
+                                    {# Display WhatsApp number or Email address #}
+                                    {% if comm_type == 'whatsapp' and latest_comm and latest_comm.sender_number %}
+                                        {{ latest_comm.sender_number }}
+                                    {% else %}
+                                        {{ inquiry.primary_email_address or 'N/A' }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {# Display Source Icon #}
+                                    {% if comm_type == 'whatsapp' %}
+                                        <span class="badge bg-success" title="WhatsApp"><i class="fab fa-whatsapp"></i> WA</span>
+                                    {% elif comm_type == 'email' %}
+                                        <span class="badge bg-info text-dark" title="Email"><i class="fas fa-envelope"></i> EM</span>
+                                    {% else %}
+                                        <span class="badge bg-light text-dark">N/A</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {# Display Subject for email, Body snippet for WhatsApp #}
+                                    {% if comm_type == 'email' and latest_comm %}
+                                        {{ latest_comm.subject if latest_comm.subject else '(No Subject)' }}
+                                    {% elif comm_type == 'whatsapp' and latest_comm %}
+                                        {{ (latest_comm.body | striptags | truncate(60)) if latest_comm.body else '(No Text Body)' }} {# Show snippet #}
+                                    {% else %}
+                                        (No messages found)
+                                    {% endif %}
+                                </td>
                                 <td class="align-middle text-center text-sm">
+                                    {# Inquiry status badges remain the same #}
                                     {% set status_lower = inquiry.status | lower %}
                                     {% if status_lower == 'complete' %}
                                         <span class="badge bg-success">Complete</span>
@@ -180,21 +206,14 @@
                                         <span class="badge bg-danger">Error</span>
                                     {% elif status_lower == 'manually corrected' %}
                                         <span class="badge bg-secondary">Manually Corrected</span>
-                                    {% elif status_lower == 'new' %}
+                                    {% elif status_lower == 'new' or status_lower == 'new_whatsapp' %}
                                         <span class="badge bg-info text-dark">New</span>
                                     {% else %}
                                         <span class="badge bg-light text-dark">{{ inquiry.status | title }}</span>
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if inquiry.extracted_data %}
-                                        <span class="text-success"><i class="fas fa-check-circle"></i> Yes</span>
-                                    {% else %}
-                                        <span class="text-muted"><i class="fas fa-times-circle"></i> No</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <!-- Link to the new inquiry detail view -->
+                                    <!-- Link to the inquiry detail view -->
                                     <a href="{{ url_for('main.inquiry_detail', inquiry_id=inquiry.id) }}" class="btn btn-sm btn-outline-primary"> 
                                         <i class="fas fa-eye me-1"></i> Details
                                     </a>

@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, current_app, Response, abort, url_
 from flask_login import login_required, current_user
 from sqlalchemy.exc import SQLAlchemyError # Import specific exception
 from sqlalchemy.orm import joinedload, selectinload # Added selectinload
-from .models import Email, ExtractedData, User, Inquiry # Added Inquiry model
+from .models import Email, ExtractedData, User, Inquiry, WhatsAppMessage # Added WhatsAppMessage model
 from . import db # Import the db object
 import json # Import json for potential type casting
 
@@ -15,47 +15,59 @@ main_bp = Blueprint('main', __name__,
 @main_bp.route('/dashboard') # Add specific dashboard route if needed
 @login_required # Assuming dashboard requires login
 def dashboard():
-    """Render the main dashboard page, now based on Inquiries."""
+    """Render the main dashboard page, showing unified inquiries."""
     try:
-        # Query Inquiry records, loading related data
         inquiries = Inquiry.query.options(
-            # selectinload(Inquiry.emails),  # REMOVED: Incompatible with lazy='dynamic'
-            joinedload(Inquiry.extracted_data) # Keep loading the one-to-one extracted data
+            joinedload(Inquiry.extracted_data)
         ).order_by(Inquiry.updated_at.desc(), Inquiry.created_at.desc()).all()
     except Exception as e:
-        current_app.logger.error(f"Error fetching inquiries for dashboard: {e}", exc_info=True) # Log full traceback
-        inquiries = [] # Return an empty list on error
-        flash("Error loading dashboard data.", "danger") # Inform user
+        current_app.logger.error(f"Error fetching inquiries for dashboard: {e}", exc_info=True)
+        inquiries = []
+        flash("Error loading dashboard data.", "danger")
 
-    # Calculate counts for dashboard cards
+    # Calculate counts (consider including new_whatsapp status)
     total_count = len(inquiries)
-    complete_count = sum(1 for i in inquiries if i.status == 'Complete' or i.status == 'Manually Corrected') # Count corrected as complete
-    # Count 'New' inquiries as Incomplete for the summary card
-    incomplete_count = sum(1 for i in inquiries if i.status == 'Incomplete' or i.status == 'new') 
+    complete_count = sum(1 for i in inquiries if i.status == 'Complete' or i.status == 'Manually Corrected')
+    incomplete_count = sum(1 for i in inquiries if i.status == 'Incomplete' or i.status == 'new' or i.status == 'new_whatsapp') # Add new_whatsapp
     error_count = sum(1 for i in inquiries if i.status == 'Error' or i.status == 'Processing Failed')
-    # Note: 'New' status is now explicitly counted in incomplete_count.
 
-    # Prepare data for the template, including the latest email for each inquiry
+    # Prepare data for the template, finding the latest communication for each inquiry
     dashboard_data = []
     for inquiry in inquiries:
-        latest_email = None
+        latest_comm = None
+        latest_comm_type = None
+        latest_timestamp = None
+
         try:
-            # Query the latest email associated with this inquiry
-            # Assuming Inquiry.emails is a dynamic relationship
+            # Get latest email
             latest_email = inquiry.emails.order_by(Email.received_at.desc()).first()
-        except Exception as email_query_err:
-            # Log if fetching the latest email fails for a specific inquiry
-            current_app.logger.error(f"Error fetching latest email for Inquiry {inquiry.id}: {email_query_err}")
+            if latest_email and latest_email.received_at:
+                latest_comm = latest_email
+                latest_comm_type = 'email'
+                latest_timestamp = latest_email.received_at
+            
+            # Get latest WhatsApp message
+            latest_wa_message = inquiry.whatsapp_messages.order_by(WhatsAppMessage.received_at.desc()).first()
+            
+            # Compare with latest email (if any)
+            if latest_wa_message and latest_wa_message.received_at: 
+                if latest_timestamp is None or latest_wa_message.received_at > latest_timestamp:
+                    latest_comm = latest_wa_message
+                    latest_comm_type = 'whatsapp'
+                    latest_timestamp = latest_wa_message.received_at # Use received_at for consistent comparison
+                    
+        except Exception as comm_query_err:
+            current_app.logger.error(f"Error fetching latest communication for Inquiry {inquiry.id}: {comm_query_err}")
         
         dashboard_data.append({
             'inquiry': inquiry,
-            'latest_email': latest_email
+            'latest_communication': latest_comm,
+            'communication_type': latest_comm_type
         })
 
-    # Pass the prepared data list and counts to the template
     return render_template('dashboard.html', 
                            user=current_user, 
-                           dashboard_items=dashboard_data,
+                           dashboard_items=dashboard_data, # Renamed variable for clarity
                            total_count=total_count,
                            complete_count=complete_count,
                            incomplete_count=incomplete_count,
@@ -97,7 +109,7 @@ def email_detail(graph_id):
         ).filter_by(graph_id=graph_id).first_or_404()
 
     except Exception as e:
-        # Log unexpected errors during query
+        # Log if fetching the latest email fails for a specific inquiry
         current_app.logger.error(f"Error fetching email details for graph_id {graph_id}: {e}")
         abort(500, description="Error retrieving email details.") # Internal server error
 
