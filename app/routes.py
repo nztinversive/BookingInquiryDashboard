@@ -9,6 +9,9 @@ import json # Import json for potential type casting
 from operator import attrgetter # Import attrgetter for sorting
 from datetime import timezone # Import timezone for naive datetime comparison
 
+# Import for manual polling
+from app.background_tasks import poll_new_emails
+
 # Create a Blueprint for the main application routes
 # Remove explicit static_folder here to rely on app-level static handling
 main_bp = Blueprint('main', __name__,
@@ -110,6 +113,21 @@ def dashboard():
                            # status_filter=status_filter,
                            # search_query=search_query 
                            )
+
+@main_bp.route('/manual_email_poll', methods=['POST']) # Use POST to avoid accidental triggering via GET
+@login_required
+def manual_email_poll_route():
+    """Manually trigger the email polling and enqueueing process."""
+    try:
+        current_app.logger.info(f"Manual email poll initiated by user: {current_user.username}")
+        # The poll_new_emails function expects the app instance.
+        # It will use the app context to get configs and enqueue jobs.
+        poll_new_emails(current_app._get_current_object()) # Pass the actual app object
+        flash("Email polling process initiated. New emails will be processed in the background.", "info")
+    except Exception as e:
+        current_app.logger.error(f"Error during manual email poll: {e}", exc_info=True)
+        flash(f"An error occurred while trying to poll for emails: {e}", "danger")
+    return redirect(url_for('.dashboard'))
 
 # Add other main routes for your dashboard here
 # Example:

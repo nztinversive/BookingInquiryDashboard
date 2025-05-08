@@ -195,10 +195,10 @@ def process_email_job(email_summary, classified_intent):
                     inquiry_extracted_data = ExtractedData(
                         inquiry_id=inquiry.id,
                         data=extracted_data_dict,
-                extraction_source=source,
-                validation_status=validation_status,
-                missing_fields=",".join(missing_fields_list) if missing_fields_list else None
-            )
+                        extraction_source=source,
+                        validation_status=validation_status,
+                        missing_fields=",".join(missing_fields_list) if missing_fields_list else None
+                    )
                     db.session.add(inquiry_extracted_data)
                 else:
                     logging.info(f"[RQ Job {email_graph_id}] Found existing ExtractedData for Inquiry {inquiry.id}. Merging.")
@@ -319,7 +319,7 @@ def poll_new_emails(app):
     with app.app_context():
         logging.info("[EmailPoller] Starting poll cycle.")
         # Determine the timestamp for fetching emails
-    if last_checked_timestamp is None:
+        if last_checked_timestamp is None:
             # On first run, check for emails from the last hour (or configure differently)
             since_timestamp = datetime.now(timezone.utc) - timedelta(hours=1)
             logging.info("[EmailPoller] First run: checking emails since 1 hour ago.")
@@ -336,7 +336,7 @@ def poll_new_emails(app):
                 logging.info("[EmailPoller] No new emails found.")
             else:
                 logging.info(f"[EmailPoller] Found {len(new_email_summaries)} new email(s). Classifying and enqueueing...")
-            processed_count = 0
+                processed_count = 0
                 for email_summary in new_email_summaries:
                     email_graph_id = email_summary.get('id')
                     email_subject = email_summary.get('subject', '')
@@ -353,14 +353,13 @@ def poll_new_emails(app):
                         # --- Enqueue for processing ---
                         job = current_email_queue.enqueue(
                             'app.background_tasks.process_email_job',
-                            email_summary, 
-                            classified_intent, 
+                            email_summary,
+                            classified_intent,
                             job_timeout='10m',
-                            result_ttl=86400 
+                            result_ttl=86400
                         )
                         logging.info(f"[EmailPoller] Enqueued job {job.id} for email {email_graph_id}.")
-                processed_count += 1
-                # ------------------------
+                        processed_count += 1
 
                     except Exception as enqueue_err:
                         logging.error(f"[EmailPoller] Failed to classify or enqueue email {email_graph_id}: {enqueue_err}", exc_info=True)
