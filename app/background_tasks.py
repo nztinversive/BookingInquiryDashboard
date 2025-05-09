@@ -8,6 +8,7 @@ from flask import current_app # Import current_app
 # RQ Imports
 from redis import Redis
 from rq import Queue
+import redis
 
 # Import necessary components from the main app package and services
 # We assume db and models are accessible via the app context later
@@ -195,10 +196,10 @@ def process_email_job(email_summary, classified_intent):
                     inquiry_extracted_data = ExtractedData(
                         inquiry_id=inquiry.id,
                         data=extracted_data_dict,
-                        extraction_source=source,
-                        validation_status=validation_status,
-                        missing_fields=",".join(missing_fields_list) if missing_fields_list else None
-                    )
+                extraction_source=source,
+                validation_status=validation_status,
+                missing_fields=",".join(missing_fields_list) if missing_fields_list else None
+            )
                     db.session.add(inquiry_extracted_data)
                 else:
                     logging.info(f"[RQ Job {email_graph_id}] Found existing ExtractedData for Inquiry {inquiry.id}. Merging.")
@@ -320,9 +321,9 @@ def poll_new_emails(app):
         logging.info("[EmailPoller] Starting poll cycle.")
         # Determine the timestamp for fetching emails
         if last_checked_timestamp is None:
-            # On first run, check for emails from the last hour (or configure differently)
-            since_timestamp = datetime.now(timezone.utc) - timedelta(hours=1)
-            logging.info("[EmailPoller] First run: checking emails since 1 hour ago.")
+            # On first run, check for emails from the last 7 days for catch-up (temporary)
+            since_timestamp = datetime.now(timezone.utc) - timedelta(days=7)
+            logging.info("[EmailPoller] First run: checking emails since 7 days ago (catch-up poll).")
         else:
             since_timestamp = last_checked_timestamp
             logging.info(f"[EmailPoller] Checking emails since {since_timestamp.isoformat()}")
@@ -330,7 +331,7 @@ def poll_new_emails(app):
         current_check_time = datetime.now(timezone.utc) # Timestamp before fetching
 
         try:
-            new_email_summaries = fetch_new_emails_since(since_timestamp.isoformat())
+            new_email_summaries = fetch_new_emails_since(since_timestamp)
 
             if not new_email_summaries:
                 logging.info("[EmailPoller] No new emails found.")
@@ -345,12 +346,16 @@ def poll_new_emails(app):
                         logging.warning("[EmailPoller] Skipping email summary with no ID.")
                         continue
 
+                    # Classify intent
                     try:
-                        # --- Classify Intent ---
                         classified_intent = classify_email_intent(email_subject, email_snippet)
                         logging.info(f"[EmailPoller] Classified intent for {email_graph_id}: '{classified_intent}'")
+                    except Exception as classify_err:
+                        logging.error(f"[EmailPoller] Failed to classify intent for {email_graph_id}: {classify_err}", exc_info=True)
+                        continue
 
-                        # --- Enqueue for processing ---
+                    # Attempt to enqueue job or fallback to synchronous processing
+                    try:
                         job = current_email_queue.enqueue(
                             'app.background_tasks.process_email_job',
                             email_summary,
@@ -359,11 +364,11 @@ def poll_new_emails(app):
                             result_ttl=86400
                         )
                         logging.info(f"[EmailPoller] Enqueued job {job.id} for email {email_graph_id}.")
-                        processed_count += 1
+                    except redis.exceptions.ConnectionError as conn_err:
+                        logging.error(f"[EmailPoller] Redis connection error: {conn_err}. Skipping email {email_graph_id}.", exc_info=True)
+                        continue
 
-                    except Exception as enqueue_err:
-                        logging.error(f"[EmailPoller] Failed to classify or enqueue email {email_graph_id}: {enqueue_err}", exc_info=True)
-                        # Decide if this email should be skipped permanently or retried later
+                    processed_count += 1
 
                 logging.info(f"[EmailPoller] Finished enqueueing {processed_count} emails.")
 

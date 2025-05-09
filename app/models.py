@@ -80,7 +80,7 @@ class AttachmentMetadata(db.Model):
     added_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
 
     def __repr__(self):
-        return f'<Attachment {self.name} ({self.graph_id})>'
+        return f'<Attachment {self.name} ({self.graph_id})>' 
 
 class WhatsAppMessage(db.Model):
     __tablename__ = 'whatsapp_messages'
