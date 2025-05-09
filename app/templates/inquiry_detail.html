@@ -48,9 +48,9 @@
             {% else %}
             <p>No extracted data available for this inquiry yet.</p>
             {% endif %}
-        </div>
-    </div>
-
+                                        </div>
+                                    </div>
+                                    
     <h3 class="mb-3">Communication Timeline</h3>
 
     {% if timeline %}
@@ -61,11 +61,11 @@
                         {% if item.type == 'email' %}
                             <i class="fas fa-envelope me-2"></i> Email from: {{ item.sender_email }}
                         {% elif item.type == 'whatsapp' %}
-                            <i class="fab fa-whatsapp me-2"></i> WhatsApp from: {{ item.sender_phone }}
+                            <i class="fab fa-whatsapp me-2"></i> WhatsApp from: {{ item.data.sender_number if item.data.from_me == False else 'Me (' + item.data.wa_chat_id + ')' }}
                         {% endif %}
                     </span>
                     <small class="text-muted">{{ item.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</small>
-                </div>
+                                        </div>
                 <div class="card-body">
                     {% if item.type == 'email' %}
                         <h5 class="card-title">{{ item.subject }}</h5>
@@ -74,11 +74,11 @@
                         <p><strong>Original Received At:</strong> {{ item.original_received_at.strftime('%Y-%m-%d %H:%M:%S') if item.original_received_at else 'N/A' }}</p>
                         <pre class="email-body bg-light p-3 rounded">{{ item.body }}</pre>
                     {% elif item.type == 'whatsapp' %}
-                        <p class="card-text">{{ item.message_body }}</p>
-                        {% if item.media_url %}
-                            <p><a href="{{ item.media_url }}" target="_blank">View Media</a></p>
-                        {% endif %}
-                    {% endif %}
+                        <p class="card-text">{{ item.data.body if item.data.body else '(No text content)' }}</p>
+                        {% if item.data.media_url %}
+                            <p><a href="{{ item.data.media_url }}" target="_blank">View Media</a> ({{ item.data.media_mime_type if item.data.media_mime_type else 'media' }})</p>
+                                {% endif %}
+                                    {% endif %}
                 </div>
                 {% if item.type == 'email' %}
                 <div class="card-footer text-muted">

@@ -327,7 +327,6 @@ def poll_new_emails(app):
         else:
             since_timestamp = last_checked_timestamp
             logging.info(f"[EmailPoller] Checking emails since {since_timestamp.isoformat()}")
-
         current_check_time = datetime.now(timezone.utc) # Timestamp before fetching
 
         try:
