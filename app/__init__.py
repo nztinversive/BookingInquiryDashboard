@@ -9,17 +9,19 @@ import json # Added json
 from flask import Flask
 import click # Added click for CLI commands
 from flask.cli import with_appcontext # Added for CLI context
+import arrow # Added for datetime humanization
 from .whatsapp_routes import whatsapp_bp
 
 # Import config
 from config import config_by_name # Import the config dictionary
 
 # Import extensions from the new file
-from .extensions import db, login_manager, migrate 
+from .extensions import db, login_manager, migrate, scheduler # Added scheduler
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 
 # --- Configure Logging ---
 # Set level to DEBUG to capture detailed filter logs
-logging.basicConfig(level=logging.DEBUG, 
+logging.basicConfig(level=logging.INFO, # Changed to INFO for less verbosity in prod
                     format='%(asctime)s - %(levelname)s - %(name)s - %(threadName)s - %(message)s')
 
 # --- Application Factory Function ---
@@ -50,8 +52,8 @@ def create_app():
     elif db_url:
         app.config['SQLALCHEMY_DATABASE_URI'] = db_url
     elif app.config.get('ENV') != 'production': # Fallback for non-prod if DATABASE_URL missing
-        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dev_database.db'
-        logging.warning("DATABASE_URL not set. Using fallback SQLite database: dev_database.db")
+        app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('SQLALCHEMY_DATABASE_URI', 'sqlite:///dev_database.db')
+        logging.warning(f"DATABASE_URL not set. Using fallback or SQLALCHEMY_DATABASE_URI: {app.config['SQLALCHEMY_DATABASE_URI']}")
     # Production MUST have DATABASE_URL (checked below)
 
     # Add checks for required variables in production
@@ -59,7 +61,7 @@ def create_app():
         required_prod_vars = [
             'SECRET_KEY', 'DATABASE_URL', 'OPENAI_API_KEY',
             'MS_GRAPH_CLIENT_ID', 'MS_GRAPH_CLIENT_SECRET', 'MS_GRAPH_TENANT_ID', 'MS_GRAPH_MAILBOX_USER_ID',
-            'WAAPI_API_TOKEN', 'WAAPI_INSTANCE_ID'
+            # 'WAAPI_API_TOKEN', 'WAAPI_INSTANCE_ID' # Assuming WhatsApp might be optional
         ]
         missing_vars = [var for var in required_prod_vars if not app.config.get(var)]
         if missing_vars:
@@ -135,10 +137,24 @@ def create_app():
             # Return user object from the user ID stored in the session
             return User.query.get(int(user_id))
 
-        # --- Start Background Tasks (Conditionally) ---
-        polling_started = False
-        # Check if required config exists BEFORE trying to import/start tasks
-        # Use app.config which is now populated from config.py
+        # --- Custom Template Filters ---
+        def humanize_datetime_filter(dt, default_if_none="N/A"):
+            if dt is None:
+                return default_if_none
+            try:
+                # Ensure datetime is timezone-aware (UTC if naive)
+                if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+                    dt = dt.replace(tzinfo=timezone.utc) # Assume UTC if naive
+                return arrow.get(dt).humanize()
+            except Exception as e:
+                logging.warning(f"Error humanizing datetime '{dt}': {e}")
+                # Fallback to string representation or a placeholder
+                return dt.strftime("%Y-%m-%d %H:%M") if isinstance(dt, datetime) else default_if_none
+
+        app.jinja_env.filters['humanize_datetime'] = humanize_datetime_filter
+        logging.info("Registered custom Jinja filter: humanize_datetime")
+
+        # --- Configure and Start APScheduler ---
         ms_graph_config_ok = all([
             app.config.get('MS_GRAPH_CLIENT_ID'),
             app.config.get('MS_GRAPH_CLIENT_SECRET'),
@@ -146,34 +162,69 @@ def create_app():
             app.config.get('MS_GRAPH_MAILBOX_USER_ID')
         ])
         openai_config_ok = bool(app.config.get('OPENAI_API_KEY'))
+        db_uri_ok = bool(app.config.get('SQLALCHEMY_DATABASE_URI'))
 
-        if ms_graph_config_ok and openai_config_ok:
-            logging.info("Required MS Graph and OpenAI configurations are present. Attempting to start background tasks...")
+        if ms_graph_config_ok and openai_config_ok and db_uri_ok:
+            logging.info("Required configurations for background tasks and DB are present.")
             try:
-                # Import services here, they might depend on config being loaded
-                from ms_graph_service import configure_ms_graph_client # Assuming configure needs to happen once
-                from data_extraction_service import configure_openai_client # Assuming configure needs to happen once
+                from ms_graph_service import configure_ms_graph_client
+                from data_extraction_service import configure_openai_client
+                from .background_tasks import trigger_email_polling_task_creation
 
-                # Configure clients using app.config
                 configure_ms_graph_client(app.config)
                 configure_openai_client(app.config)
                 logging.info("MS Graph and OpenAI clients configured.")
 
-                # Start the background polling thread
-                # from .background_tasks import start_background_polling, shutdown_background_polling # Keep commented or remove
-                polling_started = True
-                # atexit.register(shutdown_background_polling) # Remove this line
-                logging.info("Registered background task shutdown hook.")
+                # Configure APScheduler
+                # The jobstore URL must use the original 'postgres://' if that's what DATABASE_URL is
+                jobstore_url = app.config['SQLALCHEMY_DATABASE_URI'] 
+                if jobstore_url.startswith("postgresql://"): # Ensure it's compatible with SQLAlchemyJobStore
+                    pass # Already fine
+                elif jobstore_url.startswith("postgres://"): # psycopg2 might use this, SQLAlchemyJobStore might prefer postgresql
+                    # It's generally safer to stick to 'postgresql://' for SQLAlchemy components
+                    # but SQLAlchemyJobStore should handle it if db.engine does.
+                    # Let's assume db.engine is correctly formed based on SQLALCHEMY_DATABASE_URI
+                    pass 
+
+                scheduler.add_jobstore(SQLAlchemyJobStore(url=jobstore_url), alias='default')
+                
+                poll_interval_seconds = int(app.config.get('POLL_INTERVAL_SECONDS', 300)) # Default 5 minutes
+                job_id = 'trigger_email_poll_job'
+
+                # Check if job already exists to avoid duplicates if app restarts
+                if scheduler.get_job(job_id, jobstore='default') is None:
+                    scheduler.add_job(
+                        id=job_id,
+                        func=trigger_email_polling_task_creation,
+                        trigger='interval',
+                        seconds=poll_interval_seconds,
+                        jobstore='default',
+                        replace_existing=True, # Good practice
+                        misfire_grace_time=60 # Allow 1 min delay if scheduler was down
+                    )
+                    logging.info(f"Scheduled email polling task creator job ('{job_id}') to run every {poll_interval_seconds} seconds.")
+                else:
+                    logging.info(f"Job '{job_id}' already exists in the job store.")
+
+                if not scheduler.running:
+                    scheduler.start()
+                    logging.info("APScheduler started.")
+                    # Register shutdown hook for the scheduler
+                    atexit.register(lambda: scheduler.shutdown() if scheduler.running else None)
+                    logging.info("Registered APScheduler shutdown hook.")
+                else:
+                    logging.info("APScheduler is already running.")
 
             except ImportError as import_err:
-                 logging.error(f"Could not import necessary service or task modules: {import_err}")
+                 logging.error(f"Could not import necessary service or task modules for scheduler: {import_err}")
             except Exception as startup_err:
-                logging.error(f"Error during background task startup: {startup_err}", exc_info=True)
+                logging.error(f"Error during APScheduler startup or job scheduling: {startup_err}", exc_info=True)
         else:
-            missing_configs = []
-            if not ms_graph_config_ok: missing_configs.append("MS Graph")
-            if not openai_config_ok: missing_configs.append("OpenAI")
-            logging.warning(f"Background email polling thread WILL NOT be started due to missing configuration for: {', '.join(missing_configs)}")
+            missing_configs_for_scheduler = []
+            if not ms_graph_config_ok: missing_configs_for_scheduler.append("MS Graph")
+            if not openai_config_ok: missing_configs_for_scheduler.append("OpenAI")
+            if not db_uri_ok: missing_configs_for_scheduler.append("Database URI")
+            logging.warning(f"APScheduler WILL NOT be started due to missing configuration for: {', '.join(missing_configs_for_scheduler)}")
 
         # --- Register CLI Commands ---
         register_cli_commands(app)

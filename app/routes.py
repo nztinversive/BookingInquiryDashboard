@@ -3,14 +3,14 @@ from flask_login import login_required, current_user
 from sqlalchemy.exc import SQLAlchemyError # Import specific exception
 from sqlalchemy.orm import joinedload, selectinload # Added selectinload
 from sqlalchemy import or_ # Import or_ for search
-from .models import Email, ExtractedData, User, Inquiry, WhatsAppMessage # Added WhatsAppMessage model
+from .models import Email, ExtractedData, User, Inquiry, WhatsAppMessage, PendingTask # Added PendingTask model
 from . import db # Import the db object
 import json # Import json for potential type casting
 from operator import attrgetter # Import attrgetter for sorting
-from datetime import timezone # Import timezone for naive datetime comparison
+from datetime import datetime, timezone # Import timezone for naive datetime comparison
 
-# Import for manual polling
-from app.background_tasks import poll_new_emails
+# Removed direct import of poll_new_emails from background_tasks
+# from app.background_tasks import poll_new_emails
 
 # Create a Blueprint for the main application routes
 # Remove explicit static_folder here to rely on app-level static handling
@@ -114,19 +114,75 @@ def dashboard():
                            # search_query=search_query 
                            )
 
+@main_bp.route('/dashboard/customer_view')
+@login_required
+def dashboard_customer_view():
+    """Render the customer-centric dashboard view."""
+    try:
+        # Base query: Fetch inquiries and their extracted data
+        inquiries_with_data = Inquiry.query.options(
+            joinedload(Inquiry.extracted_data)
+        ).order_by(Inquiry.updated_at.desc(), Inquiry.created_at.desc()).all()
+
+        customer_view_items = []
+        for inquiry in inquiries_with_data:
+            data = inquiry.extracted_data
+            display_name = "Unknown Customer"
+            num_travelers = 0
+
+            if data:
+                if data.data.get('first_name') and data.data.get('last_name'):
+                    display_name = f"{data.data.get('first_name')} {data.data.get('last_name')}"
+                elif inquiry.primary_email_address:
+                    display_name = inquiry.primary_email_address
+                
+                if isinstance(data.data.get('travelers'), list):
+                    num_travelers = len(data.data.get('travelers'))
+            elif inquiry.primary_email_address: # Fallback if no extracted_data but inquiry exists
+                display_name = inquiry.primary_email_address
+
+
+            customer_view_items.append({
+                'inquiry': inquiry,
+                'data': data, # Pass the whole ExtractedData object (or its .data dict)
+                'display_name': display_name,
+                'num_travelers': num_travelers
+            })
+
+    except Exception as e:
+        current_app.logger.error(f"Error fetching data for customer view dashboard: {e}", exc_info=True)
+        customer_view_items = []
+        flash("Error loading customer view data.", "danger")
+
+    return render_template('dashboard_customer_view.html',
+                           user=current_user,
+                           customer_items=customer_view_items)
+
 @main_bp.route('/manual_email_poll', methods=['POST']) # Use POST to avoid accidental triggering via GET
 @login_required
 def manual_email_poll_route():
-    """Manually trigger the email polling and enqueueing process."""
+    """Manually trigger the email polling process by creating a PendingTask."""
     try:
-        current_app.logger.info(f"Manual email poll initiated by user: {current_user.username}")
-        # The poll_new_emails function expects the app instance.
-        # It will use the app context to get configs and enqueue jobs.
-        poll_new_emails(current_app._get_current_object()) # Pass the actual app object
-        flash("Email polling process initiated. New emails will be processed in the background.", "info")
+        current_app.logger.info(f"Manual email poll initiated by user: {current_user.username}. Creating PendingTask.")
+        
+        # Create a new PendingTask to trigger the poll_new_emails function via the worker
+        new_poll_task = PendingTask(
+            task_type='poll_all_new_emails', # This type is handled by the dispatcher in background_tasks
+            status='pending',
+            payload={}, # No specific payload needed for this trigger task
+            scheduled_for=datetime.now(timezone.utc) # Schedule for immediate processing
+        )
+        db.session.add(new_poll_task)
+        db.session.commit()
+        
+        flash("Manual email poll task has been successfully queued. Emails will be checked shortly.", "success")
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        current_app.logger.error(f"Database error during manual email poll task creation: {e}", exc_info=True)
+        flash(f"Database error queuing manual email poll. Please try again or check logs.", "danger")
     except Exception as e:
-        current_app.logger.error(f"Error during manual email poll: {e}", exc_info=True)
-        flash(f"An error occurred while trying to poll for emails: {e}", "danger")
+        current_app.logger.error(f"Error during manual email poll task creation: {e}", exc_info=True)
+        flash(f"An error occurred while trying to queue the email poll: {e}", "danger")
     return redirect(url_for('.dashboard'))
 
 # Add other main routes for your dashboard here

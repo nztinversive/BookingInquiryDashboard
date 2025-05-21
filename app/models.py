@@ -104,3 +104,19 @@ class WhatsAppMessage(db.Model):
 
     def __repr__(self):
         return f'<WhatsAppMessage {self.id} from {"Me" if self.from_me else self.wa_chat_id}>' 
+
+class PendingTask(db.Model):
+    __tablename__ = 'pending_tasks'
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_type = db.Column(db.String(100), nullable=False, index=True)
+    payload = db.Column(JSONB, nullable=True)
+    status = db.Column(db.String(50), default='pending', nullable=False, index=True) # pending, processing, success, failed
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+    scheduled_for = db.Column(db.DateTime(timezone=True), nullable=True, default=func.now(), index=True)
+    processed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    attempts = db.Column(db.Integer, default=0, nullable=False)
+    last_error = db.Column(db.Text, nullable=True)
+
+    def __repr__(self):
+        return f'<PendingTask {self.id} [{self.task_type}] - {self.status}>' 

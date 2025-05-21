@@ -202,35 +202,61 @@ def fetch_email_details(email_id):
         return None # Return None on error
 
 def fetch_new_emails_since(timestamp):
-    """Fetches emails received after a specific timestamp."""
+    """Fetches emails received after a specific timestamp, handling pagination."""
     logging.info(f"Polling for new emails since: {timestamp.isoformat()}")
     try:
         _ensure_config_loaded()
         target_user = _graph_config.get('mailbox_user_id')
         if not target_user:
-             raise RuntimeError("Mailbox user ID not configured.")
+            raise RuntimeError("Mailbox user ID not configured.")
 
-        endpoint = f"https://graph.microsoft.com/v1.0/users/{target_user}/messages"
         # Format timestamp for Graph API filter (ISO 8601 UTC)
         filter_time_str = timestamp.strftime('%Y-%m-%dT%H:%M:%SZ')
         filter_query = f"receivedDateTime gt {filter_time_str}"
 
+        initial_endpoint = f"https://graph.microsoft.com/v1.0/users/{target_user}/messages"
         params = {
-            '$top': 50, # Limit results per poll
-            '$select': 'id,subject,receivedDateTime,isRead,from,bodyPreview', # Added isRead, from, bodyPreview
+            '$top': 50,  # Keep a reasonable page size
+            '$select': 'id,subject,receivedDateTime,isRead,from,bodyPreview',
             '$filter': filter_query,
-            '$orderby': 'receivedDateTime asc' # Process oldest first within the new batch
+            '$orderby': 'receivedDateTime asc'  # Process oldest first
         }
-        data = _make_graph_api_call("GET", endpoint, params=params)
-        new_emails = data.get("value", []) if data else []
-        if new_emails:
-            logging.info(f"Found {len(new_emails)} new email(s) since last check.")
+
+        all_new_emails = []
+        current_endpoint_url = initial_endpoint
+        current_params = params
+        page_num = 1
+
+        while current_endpoint_url:
+            logging.info(f"Fetching page {page_num} of new emails from: {current_endpoint_url}")
+            # For the first call, current_params is used.
+            # For subsequent calls (nextLink), params are embedded in current_endpoint_url, so pass params=None
+            data = _make_graph_api_call("GET", current_endpoint_url, params=(current_params if current_endpoint_url == initial_endpoint else None))
+
+            if data and "value" in data:
+                page_emails = data["value"]
+                all_new_emails.extend(page_emails)
+                logging.info(f"Page {page_num} fetched {len(page_emails)} emails.")
+            else:
+                logging.info(f"Page {page_num} fetched 0 emails or data was unexpected.")
+
+
+            if data and "@odata.nextLink" in data:
+                current_endpoint_url = data["@odata.nextLink"]
+                current_params = None  # nextLink contains all necessary query parameters
+                page_num += 1
+            else:
+                current_endpoint_url = None  # No more pages
+
+        if all_new_emails:
+            logging.info(f"Found a total of {len(all_new_emails)} new email(s) across all pages since last check.")
         else:
-            logging.debug("No new emails found since last check.")
-        return new_emails
+            logging.debug("No new emails found across all pages since last check.")
+        return all_new_emails
     except Exception as e:
         logging.error(f"Error polling new emails: {e}")
-        return [] # Return empty list on error
+        logging.debug(traceback.format_exc()) # Add traceback for better error diagnosis
+        return []  # Return empty list on error
 
 def fetch_attachments_list(email_id):
     """Fetches the list of attachments for a specific email."""

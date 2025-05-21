@@ -1,0 +1,27 @@
+# Project Status: Email Processing Enhancement
+
+## Objective: Ensure all incoming emails are processed by implementing pagination for Microsoft Graph API calls.
+
+**Overall Status:** In Progress
+
+**Key Plan Document:** [implementation.md](implementation.md)
+
+## Progress Tracker:
+
+| Step                                                                 | File(s) Affected        | Status      | Notes                                                                 |
+| -------------------------------------------------------------------- | ----------------------- | ----------- | --------------------------------------------------------------------- |
+| **Part 1: Fixing Redis Connection Error (Critical Priority)**        |                         |             | User to verify `REDIS_URL` in Replit Secrets. Code review complete. |
+| 1.1 User Action: Verify `REDIS_URL` in Replit                       | Replit Secrets          | Pending     | User to confirm/update.                                             |
+| 1.2 Code Review: Confirm `REDIS_URL` usage                         | Various                 | Completed   | Code correctly uses `REDIS_URL` env var.                            |
+| 1.3 User Action: Test Redis Connection                             | Replit Env / Logs       | Pending     | After `REDIS_URL` update.                                           |
+| **Part 2: Addressing Gunicorn Timeout for `/manual_email_poll`**   |                         |             | To be addressed after Redis or by Part 3 changes.                   |
+| 2.1 Modify route to enqueue background task (Recommended)            | `app/routes.py`, `app/background_tasks.py` | Pending | Will be superseded if Part 3 is fully implemented.                  |
+| **Part 3: Alternative - Evaluate Removing Redis and Using Postgres for Task Queuing** |                         |             | **Currently In Progress**                                           |
+| 3.1 Define `PendingTask` Model (Postgres)                            | `app/models.py`         | ✅ **Completed** | Added `PendingTask` model.                                          |
+| 3.2 Refactor `app/background_tasks.py`                             | `app/background_tasks.py` | ✅ **Completed** | Removed Redis/RQ dependencies and associated functions (`get_redis_conn`, `get_email_queue`, `process_email_job`). Renamed and refactored `process_email_job` to `handle_process_single_email(task_payload)`. Modified `poll_new_emails` to accept the Flask app instance. Created `PendingTask` entries in the database for new emails with `task_type='process_single_email'`. Managed `last_checked_timestamp` (currently in-memory, consider DB persistence later). Added `trigger_email_polling_task_creation()` to be called by APScheduler. Added `handle_task(task_type, payload, app_for_context)` as a dispatcher to be called by the Postgres worker. It currently handles `process_single_email` and `poll_all_new_emails`. |
+| 3.3 Create `postgres_worker.py`                                     | `postgres_worker.py`    | ✅ **Completed** | Worker script initializes the Flask app. Continuously polls the `pending_tasks` table for tasks with status 'pending' or 'retry'. Uses `SELECT ... FOR UPDATE SKIP LOCKED` to claim tasks. Calls `app.background_tasks.handle_task()` with the task type and payload. Manages task status updates (processing, completed, failed) and retries. Handles graceful shutdown. |
+| 3.4 Implement APScheduler for Periodic Polling Task Creation          | `requirements.txt`, `app/extensions.py`, `app/__init__.py` | ✅ **Completed** | Added `APScheduler` to project dependencies. Initialized `scheduler = BackgroundScheduler()` in `app/extensions.py`. In `app/__init__.py`: Configured APScheduler with `SQLAlchemyJobStore` using the main database. Scheduled the `app.background_tasks.trigger_email_polling_task_creation` function to run at a configurable interval (e.g., every `POLL_INTERVAL_SECONDS`). This function creates a `PendingTask` for the worker to pick up and execute `poll_new_emails`. **Log Confirmation (2025-05-21):** User-provided logs confirm Gunicorn start, DB connection, and APScheduler successfully initializing, adding the `trigger_email_polling_task_creation` job, and starting. The job `trigger_email_poll_job` is running as expected. |
+| 3.5 Refactor `/manual_email_poll` Route in `app/routes.py`           | `app/routes.py`         | ✅ **Completed** | The `/manual_email_poll` route (POST method) has been verified. It correctly creates a `PendingTask` with `task_type='poll_all_new_emails'`, `status='pending'`, and an empty payload. This task will be picked up by `postgres_worker.py` to trigger the `poll_new_emails` function in `app/background_tasks.py` asynchronously. This resolves the Gunicorn timeout issue for manual polling by offloading the work to the background worker. |
+| 3.6 Testing Postgres-based Queue System                            | Various                 | Pending     |                                                                       |
+| **3.1: Enhance Graph API Call Handling for Pagination**              |                         |             |                                                                       |
+| 3.1.1 Modify `fetch_new_emails_since` for pagination loop          | `ms_graph_service.py`   | Completed   | Implemented loop to call `

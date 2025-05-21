@@ -1,0 +1,56 @@
+{% macro render_status_badge(status) %}
+    {% set status_badge_class = 'bg-secondary' %}
+    {% if status == 'new' or status == 'new_whatsapp' %}
+        {% set status_badge_class = 'bg-primary' %}
+    {% elif status == 'Processing' %}
+        {% set status_badge_class = 'bg-info text-dark' %}
+    {% elif status == 'Incomplete' %}
+        {% set status_badge_class = 'bg-warning text-dark' %}
+    {% elif status == 'Complete' or status == 'Manually Corrected' %}
+        {% set status_badge_class = 'bg-success' %}
+    {% elif status == 'Error' or status == 'Processing Failed' or status == 'permanently_failed' %}
+        {% set status_badge_class = 'bg-danger' %}
+    {% endif %}
+    <span class="badge {{ status_badge_class }}">{{ status | title }}</span>
+{% endmacro %}
+
+{% macro render_flash_messages() %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category if category != 'message' else 'info' }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+{% endmacro %}
+
+{% macro render_communication_preview(latest_comm, comm_type) %}
+    {% if latest_comm %}
+        {% if comm_type == 'email' %}
+            <p class="text-xs font-weight-bold mb-0" title="{{ latest_comm.subject if latest_comm.subject else '' }}">
+                {{ (latest_comm.subject if latest_comm.subject else '(No Subject)') | truncate(60) }}
+            </p>
+            <p class="text-xs text-secondary mb-0" title="{{ latest_comm.body if latest_comm.body else '' }}">
+                {{ (latest_comm.body if latest_comm.body else '(No Body)') | truncate(80) }}
+            </p>
+        {% elif comm_type == 'whatsapp' %}
+            <p class="text-xs font-weight-bold mb-0">
+                {{ (latest_comm.body if latest_comm.body else '(No Text Content)') | truncate(60) }}
+            </p>
+            {% if latest_comm.media_url %}
+                <p class="text-xs text-secondary mb-0"><i class="fas fa-paperclip"></i> Media Attached</p>
+            {% endif %}
+        {% endif %}
+    {% else %}
+        <p class="text-xs text-muted mb-0 fst-italic">No communications yet.</p>
+    {% endif %}
+{% endmacro %}
+
+{% macro render_timestamp(timestamp, format='%Y-%m-%d %H:%M') %}
+    <span class="text-secondary text-xs font-weight-bold">
+        {{ timestamp.strftime(format) if timestamp else 'N/A' }}
+    </span>
+{% endmacro %} 
