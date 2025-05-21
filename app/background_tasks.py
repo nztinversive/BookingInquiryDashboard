@@ -303,13 +303,13 @@ def poll_new_emails(app_instance):
                         continue
 
                     # Classify intent
+                    classified_intent = "Unknown Intent" # Default intent
                     try:
                         classified_intent = classify_email_intent(email_subject, email_snippet)
                         logging.info(f"[EmailPoller] Classified intent for {email_graph_id}: '{classified_intent}'")
                     except Exception as classify_err:
-                        logging.error(f"[EmailPoller] Failed to classify intent for {email_graph_id}: {classify_err}", exc_info=True)
-                        # Decide: skip this email or create task with 'unknown' intent? For now, skip.
-                        continue
+                        logging.error(f"[EmailPoller] Failed to classify intent for {email_graph_id}: {classify_err}. Using default intent: '{classified_intent}'", exc_info=True)
+                        # classified_intent is already set to default, so we just log and proceed.
 
                     # Create PendingTask
                     task_payload = {
