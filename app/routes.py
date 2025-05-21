@@ -17,10 +17,9 @@ from datetime import datetime, timezone # Import timezone for naive datetime com
 main_bp = Blueprint('main', __name__,
                     template_folder='templates')
 
-@main_bp.route('/')
-@main_bp.route('/dashboard') # Add specific dashboard route if needed
-@login_required # Assuming dashboard requires login
-def dashboard():
+@main_bp.route('/dashboard/all_inquiries')
+@login_required
+def all_inquiries_dashboard():
     """Render the main dashboard page, showing unified inquiries with filtering."""
     try:
         # Get filter parameters from request arguments
@@ -114,10 +113,11 @@ def dashboard():
                            # search_query=search_query 
                            )
 
-@main_bp.route('/dashboard/customer_view')
+@main_bp.route('/')
+@main_bp.route('/dashboard')
 @login_required
 def dashboard_customer_view():
-    """Render the customer-centric dashboard view."""
+    """Render the customer-centric dashboard view as the default."""
     try:
         # Base query: Fetch inquiries and their extracted data
         inquiries_with_data = Inquiry.query.options(
@@ -243,7 +243,7 @@ def edit_extracted_data_form(data_id):
         # This case is less likely with get_or_404, but good practice
         flash(f"No extracted data found for ID {data_id} to edit.", "warning")
         # Redirect back to dashboard if inquiry context is lost
-        return redirect(url_for('.dashboard')) 
+        return redirect(url_for('.dashboard_customer_view')) 
 
     # Pass the ExtractedData object and inquiry context to the template
     return render_template('edit_extracted_data.html', 
@@ -310,7 +310,7 @@ def update_extracted_data(data_id):
         else:
              # Fallback to dashboard if inquiry_id wasn't found (shouldn't happen with get_or_404)
              flash("Could not determine inquiry to redirect back to.", "warning")
-             return redirect(url_for('.dashboard'))
+             return redirect(url_for('.dashboard_customer_view'))
 
     except SQLAlchemyError as e:
         db.session.rollback() # Rollback in case of DB error
@@ -327,7 +327,7 @@ def update_extracted_data(data_id):
         return redirect(url_for('.inquiry_detail', inquiry_id=inquiry_id_for_redirect))
     else:
         # Fallback if redirect inquiry ID isn't available
-        return redirect(url_for('.dashboard')) 
+        return redirect(url_for('.dashboard_customer_view')) 
 
 # --- End Edit Routes --- 
 
