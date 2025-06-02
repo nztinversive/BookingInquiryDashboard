@@ -176,44 +176,51 @@ def create_app():
                 logging.info("MS Graph and OpenAI clients configured.")
 
                 # Configure APScheduler
-                # The jobstore URL must use the original 'postgres://' if that's what DATABASE_URL is
-                jobstore_url = app.config['SQLALCHEMY_DATABASE_URI'] 
-                if jobstore_url.startswith("postgresql://"): # Ensure it's compatible with SQLAlchemyJobStore
-                    pass # Already fine
-                elif jobstore_url.startswith("postgres://"): # psycopg2 might use this, SQLAlchemyJobStore might prefer postgresql
-                    # It's generally safer to stick to 'postgresql://' for SQLAlchemy components
-                    # but SQLAlchemyJobStore should handle it if db.engine does.
-                    # Let's assume db.engine is correctly formed based on SQLALCHEMY_DATABASE_URI
-                    pass 
+                jobstore_url = app.config['SQLALCHEMY_DATABASE_URI']
 
-                scheduler.add_jobstore(SQLAlchemyJobStore(url=jobstore_url), alias='default')
-                
-                poll_interval_seconds = int(app.config.get('POLL_INTERVAL_SECONDS', 300)) # Default 5 minutes
+                # Prevent re-adding job store or re-starting if create_app is called multiple times by a scheduled job
+                # This is a safeguard; the root cause of create_app being called again should also be investigated.
+                jobstore_configured = False
+                try:
+                    if scheduler.get_jobstore('default'):
+                        logging.info("APScheduler 'default' job store already configured.")
+                        jobstore_configured = True
+                    else:
+                        scheduler.add_jobstore(SQLAlchemyJobStore(url=jobstore_url), alias='default')
+                        logging.info("APScheduler 'default' job store added.")
+                        jobstore_configured = True
+                except Exception as e:
+                    logging.error(f"Error configuring APScheduler job store 'default': {e}", exc_info=True)
+                    logging.warning("APScheduler may not function correctly.")
+
+                poll_interval_seconds = int(app.config.get('POLL_INTERVAL_SECONDS', 300))
                 job_id = 'trigger_email_poll_job'
 
-                # Check if job already exists to avoid duplicates if app restarts
-                if scheduler.get_job(job_id, jobstore='default') is None:
-                    scheduler.add_job(
-                        id=job_id,
-                        func=trigger_email_polling_task_creation,
-                        trigger='interval',
-                        seconds=poll_interval_seconds,
-                        jobstore='default',
-                        replace_existing=True, # Good practice
-                        misfire_grace_time=60 # Allow 1 min delay if scheduler was down
-                    )
-                    logging.info(f"Scheduled email polling task creator job ('{job_id}') to run every {poll_interval_seconds} seconds.")
-                else:
-                    logging.info(f"Job '{job_id}' already exists in the job store.")
+                if jobstore_configured:
+                    if scheduler.get_job(job_id, jobstore='default') is None:
+                        scheduler.add_job(
+                            id=job_id,
+                            func=trigger_email_polling_task_creation,
+                            trigger='interval',
+                            seconds=poll_interval_seconds,
+                            jobstore='default',
+                            replace_existing=True, # Ensures this job isn't added multiple times if logic is re-run
+                            misfire_grace_time=60 # Allow 1 min delay if scheduler was down
+                        )
+                        logging.info(f"Scheduled email polling task creator job ('{job_id}') to run every {poll_interval_seconds} seconds.")
+                    else:
+                        logging.info(f"Job '{job_id}' already exists in the job store 'default'.")
 
-                if not scheduler.running:
-                    scheduler.start()
-                    logging.info("APScheduler started.")
-                    # Register shutdown hook for the scheduler
-                    atexit.register(lambda: scheduler.shutdown() if scheduler.running else None)
-                    logging.info("Registered APScheduler shutdown hook.")
+                    if not scheduler.running:
+                        scheduler.start()
+                        logging.info("APScheduler started.")
+                        # Register shutdown hook for the scheduler
+                        atexit.register(lambda: scheduler.shutdown() if scheduler.running else None)
+                        logging.info("Registered APScheduler shutdown hook.")
+                    else:
+                        logging.info("APScheduler is already running.")
                 else:
-                    logging.info("APScheduler is already running.")
+                    logging.warning(f"APScheduler not started and job '{job_id}' not scheduled because job store 'default' could not be configured.")
 
             except ImportError as import_err:
                  logging.error(f"Could not import necessary service or task modules for scheduler: {import_err}")
