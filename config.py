@@ -6,8 +6,10 @@ load_dotenv()
 
 class Config:
     """Base configuration class."""
-    # Flask settings - Read from SESSION_SECRET env var
-    SECRET_KEY = os.environ.get('SESSION_SECRET', 'a_very_secret_key_you_should_change')
+    # Flask settings - Read from SESSION_SECRET env var (REQUIRED)
+    SECRET_KEY = os.environ.get('SESSION_SECRET')
+    if not SECRET_KEY:
+        raise ValueError("SESSION_SECRET environment variable must be set")
 
     # SQLAlchemy settings
     # Silence the deprecation warning
@@ -66,18 +68,26 @@ class ProductionConfig(Config):
     DEBUG = False
     ENV = 'production' # Deprecated in Flask 2.3
 
-    # Get essential environment variables using .get() to avoid KeyError at import time
-    SECRET_KEY = os.environ.get('SESSION_SECRET')
-    DATABASE_URL = os.environ.get('DATABASE_URL') 
-    OPENAI_API_KEY = os.environ.get('OPEN_API_KEY') 
+    # Get essential environment variables - these are required in production
+    # SECRET_KEY is already handled in base Config class
+    DATABASE_URL = os.environ.get('DATABASE_URL')
+    if not DATABASE_URL:
+        raise ValueError("DATABASE_URL environment variable must be set in production") 
+    
+    OPENAI_API_KEY = os.environ.get('OPEN_API_KEY')
+    if not OPENAI_API_KEY:
+        raise ValueError("OPEN_API_KEY environment variable must be set in production")
 
-    # MS Graph API Credentials
+    # MS Graph API Credentials - required in production
     MS_GRAPH_CLIENT_ID = os.environ.get('MS365_CLIENT_ID')
     MS_GRAPH_CLIENT_SECRET = os.environ.get('MS365_CLIENT_SECRET')
     MS_GRAPH_TENANT_ID = os.environ.get('MS365_TENANT_ID')
     MS_GRAPH_MAILBOX_USER_ID = os.environ.get('MS365_TARGET_EMAIL')
+    
+    if not all([MS_GRAPH_CLIENT_ID, MS_GRAPH_CLIENT_SECRET, MS_GRAPH_TENANT_ID, MS_GRAPH_MAILBOX_USER_ID]):
+        raise ValueError("All MS Graph environment variables (MS365_CLIENT_ID, MS365_CLIENT_SECRET, MS365_TENANT_ID, MS365_TARGET_EMAIL) must be set in production")
 
-    # WaAPI Configuration
+    # WaAPI Configuration - required in production
     WAAPI_API_TOKEN = os.environ.get('WAAPI_API_TOKEN')
     WAAPI_INSTANCE_ID = os.environ.get('WAAPI_INSTANCE_ID')
     

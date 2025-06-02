@@ -4,6 +4,52 @@
 
 This application automates the processing of incoming emails for a travel insurance agency. It monitors an email inbox, identifies potential customer inquiries, extracts relevant travel and contact information, and stores the structured data in a database for review and quoting by agency staff.
 
+## Security Notice
+
+⚠️ **Important**: This application requires several environment variables to be set for secure operation. **Never commit sensitive credentials to version control.** 
+
+## Setup
+
+### 1. Environment Variables
+
+Copy the `env.example` file to `.env` and fill in your actual values:
+
+```bash
+cp env.example .env
+```
+
+Edit the `.env` file with your actual credentials. **Required variables:**
+
+*   `SESSION_SECRET`: A strong secret key for Flask sessions (generate with `python -c "import secrets; print(secrets.token_hex(32))"`)
+*   `DATABASE_URL`: Connection string for your database
+*   `OPEN_API_KEY`: Your API key for OpenAI
+*   `MS365_CLIENT_ID`, `MS365_CLIENT_SECRET`, `MS365_TENANT_ID`, `MS365_TARGET_EMAIL`: Microsoft Graph API credentials
+
+**Optional variables for admin user creation:**
+*   `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_EMAIL`: Creates an initial admin user
+
+### 2. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Database Setup
+
+```bash
+flask db upgrade  # If using migrations
+# OR
+python -c "from app import db; db.create_all()"  # For initial setup
+```
+
+### 4. Run the Application
+
+```bash
+python main.py
+# OR
+gunicorn --bind 0.0.0.0:5000 main:app
+```
+
 ## How It Works
 
 The application consists of a Flask web server and a background polling process:
@@ -64,13 +110,3 @@ The application consists of a Flask web server and a background polling process:
     *   `beautifulsoup4` (for HTML parsing)
     *   `python-dotenv` (assumed for environment variables)
     *   `threading` (for background polling)
-
-## Setup
-
-*(Details on setting up environment variables, installing dependencies, and running the application would go here. This requires knowing the project structure, dependency files (like `requirements.txt`), and database configuration.)*
-
-**Required Environment Variables:**
-
-*   `OPEN_API_KEY`: Your API key for OpenAI.
-*   `DATABASE_URL`: Connection string for your database (e.g., PostgreSQL, SQLite).
-*   *Microsoft Graph API Credentials (Specific variables depend on authentication flow, e.g., `CLIENT_ID`, `CLIENT_SECRET`, `TENANT_ID`, `MAILBOX_USER_ID`)*

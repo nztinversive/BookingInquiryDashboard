@@ -27,7 +27,9 @@ db = SQLAlchemy(model_class=Base)
 
 # Create Flask app
 app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key")
+app.secret_key = os.environ.get("SESSION_SECRET")
+if not app.secret_key:
+    raise ValueError("SESSION_SECRET environment variable must be set")
 
 # Configure database
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///booking_inquiries.db")
@@ -50,15 +52,23 @@ from models import User, Inquiry
 # Create all database tables
 with app.app_context():
     db.create_all()
-    # Create default admin user if not exists
-    if not User.query.filter_by(username='admin').first():
-        admin = User(
-            username='admin',
-            email='admin@example.com',
-            password_hash=generate_password_hash('admin')
-        )
-        db.session.add(admin)
-        db.session.commit()
+    # Create default admin user if not exists (only if admin credentials are provided)
+    admin_username = os.environ.get('ADMIN_USERNAME')
+    admin_password = os.environ.get('ADMIN_PASSWORD') 
+    admin_email = os.environ.get('ADMIN_EMAIL')
+    
+    if admin_username and admin_password and admin_email:
+        if not User.query.filter_by(username=admin_username).first():
+            admin = User(
+                username=admin_username,
+                email=admin_email,
+                password_hash=generate_password_hash(admin_password)
+            )
+            db.session.add(admin)
+            db.session.commit()
+            print(f"Created admin user: {admin_username}")
+    else:
+        print("WARNING: Admin user not created. Set ADMIN_USERNAME, ADMIN_PASSWORD, and ADMIN_EMAIL environment variables to create an admin user.")
 
 @login_manager.user_loader
 def load_user(user_id):
