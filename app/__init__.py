@@ -177,46 +177,64 @@ def create_app():
 
                 # Configure APScheduler
                 jobstore_url = app.config['SQLALCHEMY_DATABASE_URI']
-
-                # Prevent re-adding job store or re-starting if create_app is called multiple times by a scheduled job
-                # This is a safeguard; the root cause of create_app being called again should also be investigated.
-                jobstore_configured = False
+                jobstore_successfully_configured = False
                 try:
-                    if scheduler.get_jobstore('default'):
-                        logging.info("APScheduler 'default' job store already configured.")
-                        jobstore_configured = True
+                    # Attempt to add the job store.
+                    # If create_app is called multiple times with the same scheduler instance (from extensions.py),
+                    # this previously raised a ValueError if the alias 'default' was already in use.
+                    scheduler.add_jobstore(SQLAlchemyJobStore(url=jobstore_url), alias='default')
+                    logging.info("APScheduler 'default' job store added/configured.")
+                    jobstore_successfully_configured = True
+                except ValueError as ve:
+                    if 'already has a job store by the alias' in str(ve).lower(): # Check if it's the expected error
+                        logging.info("APScheduler 'default' job store was already configured (ValueError caught).")
+                        jobstore_successfully_configured = True # Assume it's usable
                     else:
-                        scheduler.add_jobstore(SQLAlchemyJobStore(url=jobstore_url), alias='default')
-                        logging.info("APScheduler 'default' job store added.")
-                        jobstore_configured = True
+                        # Different ValueError, re-raise or log more critically
+                        logging.error(f"Unexpected ValueError configuring APScheduler job store 'default': {ve}", exc_info=True)
                 except Exception as e:
+                    # Catch any other exceptions during job store configuration
                     logging.error(f"Error configuring APScheduler job store 'default': {e}", exc_info=True)
-                    logging.warning("APScheduler may not function correctly.")
+                
+                if not jobstore_successfully_configured:
+                    # Attempt to see if the job store somehow exists despite the add_jobstore call issues
+                    # This is a fallback check, as there isn't a direct 'has_jobstore' method.
+                    # We can try to get a job from it; if it fails, it's likely not there or not working.
+                    try:
+                        scheduler.get_jobs(jobstore='default') # This will raise an exception if the jobstore doesn't exist
+                        logging.info("APScheduler 'default' job store seems to exist despite earlier add_jobstore issues.")
+                        jobstore_successfully_configured = True
+                    except Exception:
+                        logging.warning("APScheduler 'default' job store could not be confirmed after add_jobstore issues.")
 
                 poll_interval_seconds = int(app.config.get('POLL_INTERVAL_SECONDS', 300))
                 job_id = 'trigger_email_poll_job'
 
-                if jobstore_configured:
+                if jobstore_successfully_configured:
+                    # Check if job already exists to avoid duplicates
                     if scheduler.get_job(job_id, jobstore='default') is None:
                         scheduler.add_job(
                             id=job_id,
-                            func=trigger_email_polling_task_creation,
+                            func=trigger_email_polling_task_creation, # CRITICAL: This function should not call create_app()
                             trigger='interval',
                             seconds=poll_interval_seconds,
                             jobstore='default',
-                            replace_existing=True, # Ensures this job isn't added multiple times if logic is re-run
-                            misfire_grace_time=60 # Allow 1 min delay if scheduler was down
+                            replace_existing=True, 
+                            misfire_grace_time=60
                         )
                         logging.info(f"Scheduled email polling task creator job ('{job_id}') to run every {poll_interval_seconds} seconds.")
                     else:
                         logging.info(f"Job '{job_id}' already exists in the job store 'default'.")
 
                     if not scheduler.running:
-                        scheduler.start()
-                        logging.info("APScheduler started.")
-                        # Register shutdown hook for the scheduler
-                        atexit.register(lambda: scheduler.shutdown() if scheduler.running else None)
-                        logging.info("Registered APScheduler shutdown hook.")
+                        try:
+                            scheduler.start()
+                            logging.info("APScheduler started.")
+                            # Register shutdown hook for the scheduler
+                            atexit.register(lambda: scheduler.shutdown() if scheduler.running else None)
+                            logging.info("Registered APScheduler shutdown hook.")
+                        except Exception as e:
+                            logging.error(f"APScheduler failed to start: {e}", exc_info=True)
                     else:
                         logging.info("APScheduler is already running.")
                 else:
