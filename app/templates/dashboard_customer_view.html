@@ -10,7 +10,30 @@
             <h2 class="text-white">Customer View</h2>
             <div>
                 <a href="{{ url_for('main.all_inquiries_dashboard') }}" class="btn btn-sm btn-outline-light me-2">All Inquiries View</a>
-                <!-- Add other view options or global actions here if needed -->
+                <button type="button" class="btn btn-sm btn-outline-light" data-bs-toggle="modal" data-bs-target="#manualPollModalCustomerView">
+                    <i class="fas fa-sync-alt me-1"></i> Manual Email Poll
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manual Poll Modal -->
+    <div class="modal fade" id="manualPollModalCustomerView" tabindex="-1" aria-labelledby="manualPollModalLabelCustomerView" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="manualPollModalLabelCustomerView">Manual Email Poll</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to manually poll for new emails?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <form action="{{ url_for('main.manual_email_poll_route') }}" method="POST">
+                        <button type="submit" class="btn btn-primary">Poll Now</button>
+                    </form>
+                </div>
             </div>
         </div>
     </div>

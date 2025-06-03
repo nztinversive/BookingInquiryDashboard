@@ -183,7 +183,7 @@ def manual_email_poll_route():
     except Exception as e:
         current_app.logger.error(f"Error during manual email poll task creation: {e}", exc_info=True)
         flash(f"An error occurred while trying to queue the email poll: {e}", "danger")
-    return redirect(url_for('.dashboard'))
+    return redirect(url_for('.dashboard_customer_view'))
 
 # Add other main routes for your dashboard here
 # Example:
