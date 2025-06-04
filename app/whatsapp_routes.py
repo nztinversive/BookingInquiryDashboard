@@ -164,6 +164,7 @@ def waapi_webhook():
 def greenapi_webhook(): 
     """Handle incoming WhatsApp messages from Green API via Webhook."""
     current_app.logger.info(f"Incoming request to Green API webhook: {request.method} {request.url}")
+    current_app.logger.info(f"Request Headers: {list(request.headers)}") # Log all headers
 
     secret = current_app.config.get('WAAPI_WEBHOOK_SECRET')
     if not secret:
