@@ -33,7 +33,7 @@
     - Updates `Inquiry` status to `'Complete'` or `'Incomplete'`.
     - Commits database session.
   - Updated `handle_task` dispatcher in `app/background_tasks.py` to include the new handler.
-- [ ] **8. Unit test handler (mock OpenAI)** - *In Progress*
+- [x] **8. Unit test handler (mock OpenAI)**
   - Created `tests/test_whatsapp_processing.py`.
   - Added `test_app` and `app_context` fixtures.
   - Added tests for:
@@ -44,7 +44,8 @@
     - Processing media messages with captions.
     - Handling extraction failures (`Incomplete` status).
     - Handling messages with no text for extraction.
-  - *Further tests to be added.*
+    - Handling media messages with no caption for existing inquiries.
+    - Handling other message types (e.g., stickers) for new and existing inquiries.
 
 ## Phase 4 – UI Wiring
 - [ ] **9. Dashboard badges**

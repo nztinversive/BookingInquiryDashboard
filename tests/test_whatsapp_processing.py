@@ -266,3 +266,138 @@ def test_db_integrity_error_other_than_duplicate_wa_message(mock_extract, mock_c
 # - Message from instance WID (from_me = True).
 # - Different media types if parsing logic becomes more complex.
 # - Payload with no messageData at all.
+
+SAMPLE_MEDIA_MESSAGE_NO_CAPTION_PAYLOAD = {
+    "typeWebhook": "incomingMessageReceived",
+    "instanceData": {"idInstance": 789, "wid": "[email protected]", "typeInstance": "whatsapp"},
+    "timestamp": int(datetime.now(timezone.utc).timestamp()),
+    "idMessage": "testmedia_nocaption001",
+    "senderData": {"chatId": "[email protected]", "sender": "[email protected]", "senderName": "No Caption User"},
+    "messageData": {
+        "typeMessage": "imageMessage",
+        "imageMessageData": {
+            "downloadUrl": "https://example.com/image_no_caption.jpg",
+            "mimeType": "image/jpeg",
+            # "caption": "This caption is intentionally missing",
+            "fileName": "no_caption.jpg"
+        }
+    }
+}
+
+SAMPLE_STICKER_MESSAGE_PAYLOAD = {
+    "typeWebhook": "incomingMessageReceived",
+    "instanceData": {"idInstance": 101, "wid": "[email protected]", "typeInstance": "whatsapp"},
+    "timestamp": int(datetime.now(timezone.utc).timestamp()),
+    "idMessage": "teststicker001",
+    "senderData": {"chatId": "[email protected]", "sender": "[email protected]", "senderName": "Sticker Sender"},
+    "messageData": {
+        "typeMessage": "stickerMessage",
+        "stickerMessageData": {
+            # Sticker specific data, might not be relevant for extraction logic
+            "filehash": "sticker_file_hash_example" 
+        }
+    }
+}
+
+
+@patch('app.background_tasks.extract_travel_data')
+def test_media_message_no_caption_existing_inquiry(mock_extract_travel_data, app_context, test_app):
+    """Test media message with no caption for an existing inquiry."""
+    payload = SAMPLE_MEDIA_MESSAGE_NO_CAPTION_PAYLOAD.copy()
+    payload['idMessage'] = 'media_no_caption_existing_01'
+    sender_chat_id = payload['senderData']['chatId']
+    existing_inquiry_identifier = f"whatsapp_{sender_chat_id}@internal.placeholder"
+
+    # Create existing Inquiry and ExtractedData
+    existing_inquiry = Inquiry(primary_email_address=existing_inquiry_identifier, status='Complete')
+    db.session.add(existing_inquiry)
+    db.session.flush() # Get ID for ExtractedData
+    
+    initial_extracted_data = ExtractedData(
+        inquiry_id=existing_inquiry.id,
+        data={"first_name": "Original", "last_name": "Data"},
+        validation_status="Complete"
+    )
+    db.session.add(initial_extracted_data)
+    db.session.commit()
+    db.session.refresh(existing_inquiry)
+    db.session.refresh(initial_extracted_data)
+
+
+    result = handle_new_whatsapp_message(payload, test_app)
+
+    assert result['status'] == 'success'
+    mock_extract_travel_data.assert_not_called() # No caption, so no extraction attempt
+
+    wa_message = db.session.get(WhatsAppMessage, 'media_no_caption_existing_01')
+    assert wa_message is not None
+    assert wa_message.inquiry_id == existing_inquiry.id
+    assert wa_message.body is None # No caption means body should be None
+    assert wa_message.media_url == payload['messageData']['imageMessageData']['downloadUrl']
+    assert wa_message.message_type == "imageMessage"
+
+    updated_inquiry = db.session.get(Inquiry, existing_inquiry.id)
+    assert updated_inquiry.status == 'Complete' # Status should not change
+
+    updated_extracted_data = db.session.query(ExtractedData).filter_by(inquiry_id=existing_inquiry.id).first()
+    assert updated_extracted_data is not None
+    assert updated_extracted_data.data == {"first_name": "Original", "last_name": "Data"} # Data should not change
+    assert updated_extracted_data.id == initial_extracted_data.id # Should be the same record
+
+
+@patch('app.background_tasks.extract_travel_data')
+def test_other_message_type_new_inquiry(mock_extract_travel_data, app_context, test_app):
+    """Test a non-text, non-media message (e.g., sticker) for a new inquiry."""
+    payload = SAMPLE_STICKER_MESSAGE_PAYLOAD.copy()
+    payload['idMessage'] = 'sticker_new_inquiry_01'
+    
+    result = handle_new_whatsapp_message(payload, test_app)
+
+    assert result['status'] == 'success'
+    mock_extract_travel_data.assert_not_called()
+
+    inquiry = db.session.get(Inquiry, result['inquiry_id'])
+    assert inquiry is not None
+    assert inquiry.status == 'new_whatsapp' # Default status for new inquiry with no extraction
+
+    wa_message = db.session.get(WhatsAppMessage, 'sticker_new_inquiry_01')
+    assert wa_message is not None
+    assert wa_message.inquiry_id == inquiry.id
+    assert wa_message.message_type == 'stickerMessage'
+    assert wa_message.body is None # No text content
+
+    extracted_data_count = db.session.query(ExtractedData).filter_by(inquiry_id=inquiry.id).count()
+    assert extracted_data_count == 0
+
+
+@patch('app.background_tasks.extract_travel_data')
+def test_other_message_type_existing_inquiry(mock_extract_travel_data, app_context, test_app):
+    """Test a non-text, non-media message (e.g., sticker) for an existing inquiry."""
+    payload = SAMPLE_STICKER_MESSAGE_PAYLOAD.copy()
+    payload['idMessage'] = 'sticker_existing_inquiry_01'
+    sender_chat_id = payload['senderData']['chatId']
+    existing_inquiry_identifier = f"whatsapp_{sender_chat_id}@internal.placeholder"
+
+    # Create existing Inquiry
+    existing_inquiry = Inquiry(primary_email_address=existing_inquiry_identifier, status='Incomplete')
+    db.session.add(existing_inquiry)
+    db.session.commit()
+    db.session.refresh(existing_inquiry)
+
+    result = handle_new_whatsapp_message(payload, test_app)
+
+    assert result['status'] == 'success'
+    assert result['inquiry_id'] == existing_inquiry.id
+    mock_extract_travel_data.assert_not_called()
+
+    updated_inquiry = db.session.get(Inquiry, existing_inquiry.id)
+    assert updated_inquiry.status == 'Incomplete' # Status should remain unchanged
+
+    wa_message = db.session.get(WhatsAppMessage, 'sticker_existing_inquiry_01')
+    assert wa_message is not None
+    assert wa_message.inquiry_id == existing_inquiry.id
+    assert wa_message.message_type == 'stickerMessage'
+
+    # Ensure no new ExtractedData was created or existing one modified (if we had one)
+    extracted_data_count = db.session.query(ExtractedData).filter_by(inquiry_id=existing_inquiry.id).count()
+    assert extracted_data_count == 0
