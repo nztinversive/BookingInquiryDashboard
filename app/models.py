@@ -24,9 +24,38 @@ class Inquiry(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now())
 
-    emails = db.relationship('Email', backref='inquiry', lazy='dynamic')
+    emails = db.relationship('Email', backref='inquiry', lazy='dynamic', order_by="desc(Email.received_at)")
     extracted_data = db.relationship('ExtractedData', backref='inquiry', uselist=False, cascade="all, delete-orphan")
-    whatsapp_messages = db.relationship('WhatsAppMessage', backref='inquiry', lazy='dynamic', cascade="all, delete-orphan")
+    whatsapp_messages = db.relationship('WhatsAppMessage', backref='inquiry', lazy='dynamic', order_by="desc(WhatsAppMessage.wa_timestamp)", cascade="all, delete-orphan")
+
+    @property
+    def latest_message_info(self):
+        latest_email = self.emails.first()
+        latest_whatsapp = self.whatsapp_messages.first()
+
+        latest_source = None
+        latest_timestamp = None
+
+        email_ts = latest_email.received_at if latest_email and latest_email.received_at else None
+        whatsapp_ts = latest_whatsapp.wa_timestamp if latest_whatsapp and latest_whatsapp.wa_timestamp else None
+
+        if email_ts and whatsapp_ts:
+            if email_ts > whatsapp_ts:
+                latest_source = 'email'
+                latest_timestamp = email_ts
+            else:
+                latest_source = 'whatsapp'
+                latest_timestamp = whatsapp_ts
+        elif email_ts:
+            latest_source = 'email'
+            latest_timestamp = email_ts
+        elif whatsapp_ts:
+            latest_source = 'whatsapp'
+            latest_timestamp = whatsapp_ts
+        
+        if latest_source:
+            return {"source": latest_source, "timestamp": latest_timestamp}
+        return None
 
     def __repr__(self):
         return f'<Inquiry {self.id} for {self.primary_email_address}>'

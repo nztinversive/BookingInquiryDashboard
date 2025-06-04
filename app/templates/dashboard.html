@@ -179,18 +179,20 @@
                                 {% for item_data in dashboard_items %}
                                 {% set inquiry = item_data.inquiry %}
                                 {% set latest_comm = item_data.latest_communication %}
-                                {% set comm_type = item_data.communication_type %}
+                                {# Use inquiry.latest_message_info directly #}
+                                {% set latest_info = inquiry.latest_message_info %}
                                 {% set is_error_status = inquiry.status in ['Error', 'Processing Failed', 'permanently_failed'] %}
                                 <tr class="align-middle {% if is_error_status %}table-danger-light{% endif %}">
                                     <td>
                                         <div class="d-flex px-2 py-1">
                                             <div>
-                                                {# Using a generic person icon or based on comm_type #}
-                                                {% if comm_type == 'whatsapp' %}
-                                                    <i class="fab fa-whatsapp fa-lg me-2 align-middle" style="color: #25D366;"></i>
-                                    {% else %}
-                                                    <i class="fas fa-user-circle fa-lg me-2 align-middle text-secondary"></i>
-                                    {% endif %}
+                                                {% if latest_info and latest_info.source == 'whatsapp' %}
+                                                    <i class="fab fa-whatsapp fa-lg me-2 align-middle" style="color: #25D366;" title="Latest: WhatsApp"></i>
+                                                {% elif latest_info and latest_info.source == 'email' %}
+                                                    <i class="fas fa-envelope fa-lg me-2 align-middle text-primary" title="Latest: Email"></i>
+                                                {% else %}
+                                                    <i class="fas fa-question-circle fa-lg me-2 align-middle text-secondary" title="No communication found"></i>
+                                                {% endif %}
                                             </div>
                                             <div class="d-flex flex-column justify-content-center">
                                                 <h6 class="mb-0 text-sm">
@@ -203,16 +205,27 @@
                                         </div>
                                 </td>
                                 <td class="d-none d-sm-table-cell">
-                                        {% if comm_type == 'email' and latest_comm %}
+                                        {% if latest_info and latest_info.source == 'email' %}
                                             <span class="badge bg-light text-dark"><i class="fas fa-envelope me-1"></i> Email</span>
-                                        {% elif comm_type == 'whatsapp' and latest_comm %}
+                                        {% elif latest_info and latest_info.source == 'whatsapp' %}
                                             <span class="badge bg-light text-dark"><i class="fab fa-whatsapp me-1"></i> WhatsApp</span>
+                                        {% elif latest_comm %}
+                                            {# Fallback for old comm_type if latest_info is None, though should ideally not happen #}
+                                            {% set comm_type = item_data.communication_type %}
+                                            {% if comm_type == 'email' %}
+                                                <span class="badge bg-light text-dark"><i class="fas fa-envelope me-1"></i> Email (Legacy)</span>
+                                            {% elif comm_type == 'whatsapp' %}
+                                                <span class="badge bg-light text-dark"><i class="fab fa-whatsapp me-1"></i> WhatsApp (Legacy)</span>
+                                            {% else %}
+                                                <span class="badge bg-light text-secondary">N/A</span>
+                                            {% endif %}
                                         {% else %}
                                             <span class="badge bg-light text-secondary">N/A</span>
                                         {% endif %}
                                     </td>
                                     <td class="align-middle">
                                         {% if latest_comm %}
+                                            {% set comm_type = item_data.communication_type %}{# Keep using this for snippet structure for now #}
                                             {% if comm_type == 'email' %}
                                                 <p class="text-xs font-weight-bold mb-0" title="{{ latest_comm.subject if latest_comm.subject else '' }}">
                                                     {{ (latest_comm.subject if latest_comm.subject else '(No Subject)') | truncate(60) }}

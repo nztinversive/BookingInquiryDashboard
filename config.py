@@ -90,7 +90,17 @@ class ProductionConfig(Config):
     # WaAPI Configuration - required in production
     WAAPI_API_TOKEN = os.environ.get('WAAPI_API_TOKEN')
     WAAPI_INSTANCE_ID = os.environ.get('WAAPI_INSTANCE_ID')
+    WAAPI_WEBHOOK_SECRET = os.environ.get('WAAPI_WEBHOOK_SECRET')
     
+    # It's a good idea to check if these are set in production, 
+    # especially if WhatsApp integration is critical.
+    if not all([WAAPI_API_TOKEN, WAAPI_INSTANCE_ID, WAAPI_WEBHOOK_SECRET]):
+        # Consider if all three are always mandatory or depends on webhook vs. polling
+        # For now, let's assume they are if the feature is to be fully functional.
+        print("WARNING: One or more WhatsApp API environment variables (WAAPI_API_TOKEN, WAAPI_INSTANCE_ID, WAAPI_WEBHOOK_SECRET) are not set. WhatsApp features might be limited or non-functional.")
+        # If strictly required for production to boot, raise ValueError:
+        # raise ValueError("All WAAPI environment variables must be set in production if WhatsApp integration is enabled.")
+
     # Defer database URI processing to app factory
     SQLALCHEMY_DATABASE_URI = None # Will be set in create_app
 

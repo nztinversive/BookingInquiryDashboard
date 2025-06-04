@@ -397,6 +397,241 @@ def trigger_email_polling_task_creation():
             db.session.rollback()
             logging.error(f"[SchedulerCallback] Failed to create 'poll_new_emails_task' due to: {e}", exc_info=True)
 
+# New function to handle WhatsApp messages:
+def handle_new_whatsapp_message(payload, app_for_context_param):
+    """
+    Processes an incoming WhatsApp message payload from Green API.
+    This function is called by the task dispatcher (`handle_task`).
+
+    Args:
+        payload (dict): The JSON payload of the WhatsApp message from Green API.
+        app_for_context_param: The Flask app instance for context.
+    """
+    # Use the passed app_for_context_param to establish context
+    # app = app_for_context_param # Original thought
+    # Correct way to use app context for background tasks if not already in one:
+    app = current_app._get_current_object() if current_app else app_for_context_param
+    
+    with app.app_context():
+        from . import db
+        from .models import Inquiry, WhatsAppMessage, ExtractedData, User # Assuming User might be needed for 'updated_by'
+
+        log_prefix = "[WhatsAppHandler]"
+        logging.info(f"{log_prefix} Starting processing of new WhatsApp message.")
+        logging.debug(f"{log_prefix} Received payload: {payload}")
+
+        # Extract primary identifiers from payload (adjust keys based on actual Green API structure)
+        # These are examples based on common Green API payload structures.
+        # Refer to Green API documentation for the exact field names.
+        # Example: data might be nested under 'messageData', 'senderData', etc.
+        
+        # Assuming the payload is the direct webhook data from Green API.
+        # Example structure from Green API docs for incoming message:
+        # {
+        #   "typeWebhook": "incomingMessageReceived",
+        #   "instanceData": { "idInstance": ..., "wid": ..., "typeInstance": ... },
+        #   "timestamp": ..., 
+        #   "idMessage": "...",
+        #   "senderData": { "chatId": "[email protected]", "sender": "[email protected]", "senderName": "..." },
+        #   "messageData": {
+        #     "typeMessage": "textMessage", 
+        #     "textMessageData": { "textMessage": "Hello" }
+        #     OR "extendedTextMessageData": { "text": "Hello with quote", "stanzaId": ...}
+        #     OR "imageMessageData": { "url": ..., "caption": ..., "mimeType": ...}
+        #     ...
+        #   }
+        # }
+
+        id_message = payload.get('idMessage')
+        sender_data = payload.get('senderData', {})
+        chat_id = sender_data.get('chatId') # e.g., "[email protected]"
+        sender = sender_data.get('sender')   # Often same as chatId for user messages
+        sender_name = sender_data.get('senderName')
+
+        message_data = payload.get('messageData', {})
+        type_message = message_data.get('typeMessage')
+        
+        text_message = None
+        media_url = None
+        media_mime_type = None
+        media_caption = None
+        media_filename = None # Green API might provide this
+
+        if type_message == 'textMessage' and message_data.get('textMessageData'):
+            text_message = message_data['textMessageData'].get('textMessage')
+        elif type_message == 'extendedTextMessage' and message_data.get('extendedTextMessageData'):
+            text_message = message_data['extendedTextMessageData'].get('text') # Often contains quoted msg text too
+        elif type_message in ['imageMessage', 'videoMessage', 'documentMessage', 'audioMessage']:
+            # Simplified: Extract common media fields. Adjust per specific typeXXXMessageData structure.
+            media_data_key = type_message + "Data" # e.g., imageMessageData
+            if message_data.get(media_data_key):
+                # Common fields (might vary by media type in Green API docs)
+                # Prefer 'downloadUrl' if available and directly accessible, otherwise 'url'.
+                media_url = message_data[media_data_key].get('downloadUrl') or message_data[media_data_key].get('url')
+                media_mime_type = message_data[media_data_key].get('mimeType')
+                media_caption = message_data[media_data_key].get('caption')
+                media_filename = message_data[media_data_key].get('fileName') # If provided
+                if not text_message and media_caption: # Use caption as text if no primary text
+                    text_message = media_caption
+        # Add more elif for other types like locationMessage, contactMessage, etc. if needed
+
+        wa_timestamp_from_payload = payload.get('timestamp') # This is usually a Unix timestamp (seconds)
+        wa_datetime = None
+        if wa_timestamp_from_payload:
+            try:
+                wa_datetime = datetime.fromtimestamp(int(wa_timestamp_from_payload), tz=timezone.utc)
+            except (ValueError, TypeError) as e:
+                logging.warning(f"{log_prefix} Could not parse Green API timestamp '{wa_timestamp_from_payload}': {e}")
+
+        from_me = False # For incoming, this should generally be False.
+                        # GreenAPI's `sender` vs `instanceData.wid` can determine if it's an echo of an outgoing msg.
+        if payload.get("instanceData", {}).get("wid") == sender:
+            # This logic might need refinement based on how GreenAPI handles echoes of outgoing messages vs. true incoming.
+            # Typically, webhooks are for *incoming* messages from others.
+            # If 'senderData.sender' is the API's own WID, it's an echo of an outgoing message.
+            logging.info(f"{log_prefix} Message sender {sender} matches instance WID. Likely an echo of an outgoing message. Setting from_me=True.")
+            from_me = True
+            # Decide if you want to process echoes of your own messages. For now, we will.
+
+        if not id_message or not chat_id or not sender:
+            logging.error(f"{log_prefix} Essential fields missing from payload: idMessage, chatId, or sender. Payload: {payload}")
+            raise ValueError("Essential WhatsApp message identifiers missing in payload")
+
+        # --- Inquiry lookup/creation --- 
+        # Use chat_id for inquiry association, as sender might be a group participant if in a group context.
+        # For 1-on-1 chats, chat_id and sender (user's WID) are often the same.
+        inquiry_identifier_email = f"whatsapp_{chat_id}@internal.placeholder"
+        inquiry = None
+        
+        try:
+            inquiry = db.session.query(Inquiry).filter_by(primary_email_address=inquiry_identifier_email).first()
+            new_inquiry_created = False
+            if not inquiry:
+                logging.info(f"{log_prefix} No existing Inquiry for identifier {inquiry_identifier_email}. Creating new one.")
+                inquiry = Inquiry(
+                    primary_email_address=inquiry_identifier_email,
+                    status='new_whatsapp' # Initial status for new WhatsApp inquiries
+                )
+                db.session.add(inquiry)
+                db.session.flush() # Get inquiry.id before linking WhatsAppMessage
+                new_inquiry_created = True
+                logging.info(f"{log_prefix} Created new Inquiry ID {inquiry.id}")
+            else:
+                logging.info(f"{log_prefix} Found existing Inquiry ID {inquiry.id} for identifier {inquiry_identifier_email}")
+                # Optionally update inquiry status if it was, e.g., 'Complete' and now gets a new message
+                if inquiry.status not in ['new_whatsapp', 'Processing', 'Incomplete']: # Example: don't overwrite these
+                    pass # Or set to 'new_whatsapp' / 'Follow-up'
+                inquiry.updated_at = datetime.now(timezone.utc) # Manually trigger update if not auto by ORM event
+
+            # --- Create WhatsAppMessage record ---
+            # Check if this specific message ID already exists for this inquiry to prevent duplicates
+            existing_wa_message = db.session.query(WhatsAppMessage).filter_by(id=id_message).first()
+            if existing_wa_message:
+                logging.warning(f"{log_prefix} WhatsApp message with ID {id_message} already exists. Skipping creation. Status: {existing_wa_message.message_type}")
+                # This specific message is a duplicate, but the task for PendingTask can be marked successful.
+                return {"status": "skipped", "message": "WhatsApp message already processed (duplicate ID)"}
+
+            new_wa_message = WhatsAppMessage(
+                id=id_message, # From Green API
+                inquiry_id=inquiry.id,
+                wa_chat_id=chat_id,
+                sender_number=sender, # This is the sender's WID (e.g., [email protected])
+                from_me=from_me,
+                message_type=type_message or 'unknown',
+                body=text_message,
+                media_url=media_url,
+                media_mime_type=media_mime_type,
+                media_caption=media_caption,
+                media_filename=media_filename,
+                wa_timestamp=wa_datetime, # Timestamp from Green API when message was sent/received by WA server
+                # received_at is defaulted to now() by the model when we save.
+                # raw_payload=payload # Optional: store the full JSON if needed for debugging or reprocessing
+            )
+            db.session.add(new_wa_message)
+            logging.info(f"{log_prefix} Prepared WhatsAppMessage record for ID {id_message}. Linked to Inquiry ID {inquiry.id}.")
+
+            # --- Data Extraction (only if there's text content) ---
+            extracted_data_dict = None
+            extraction_source = None
+            current_validation_status = inquiry.status # Preserve current inquiry status before potential update
+
+            if text_message:
+                logging.info(f"{log_prefix} Attempting data extraction from text: \"{text_message[:100]}...\"")
+                try:
+                    extracted_data_dict, extraction_source = extract_travel_data(text_message) # Assuming text input
+                    logging.info(f"{log_prefix} Extraction complete. Source: {extraction_source}. Data keys: {list(extracted_data_dict.keys() if extracted_data_dict else [])}")
+                except Exception as extract_err:
+                    logging.error(f"{log_prefix} Error during data extraction: {extract_err}", exc_info=True)
+                    # Proceed without extracted data, but log the error.
+                    # The inquiry status might remain 'new_whatsapp' or 'Incomplete'.
+            else:
+                logging.info(f"{log_prefix} No text message content for data extraction (Type: {type_message}).")
+
+            # --- Upsert ExtractedData & Update Inquiry Status ---
+            if extracted_data_dict:
+                essential_fields = app.config.get("ESSENTIAL_EXTRACTION_FIELDS", ["first_name", "last_name", "travel_start_date", "travel_end_date", "trip_cost"])
+                inquiry_extracted_data = db.session.query(ExtractedData).filter_by(inquiry_id=inquiry.id).first()
+                if not inquiry_extracted_data:
+                    logging.info(f"{log_prefix} Creating new ExtractedData for Inquiry {inquiry.id}.")
+                    missing_fields_list = [field for field in essential_fields if not extracted_data_dict.get(field)]
+                    current_validation_status = "Incomplete" if missing_fields_list else "Complete"
+                    inquiry_extracted_data = ExtractedData(
+                        inquiry_id=inquiry.id,
+                        data=extracted_data_dict,
+                        extraction_source=extraction_source or 'whatsapp_initial_extraction',
+                        validation_status=current_validation_status,
+                        missing_fields=",".join(missing_fields_list) if missing_fields_list else None
+                    )
+                    db.session.add(inquiry_extracted_data)
+                else:
+                    logging.info(f"{log_prefix} Found existing ExtractedData for Inquiry {inquiry.id}. Merging.")
+                    current_db_data = inquiry_extracted_data.data or {}
+                    merged_data = current_db_data.copy()
+                    updated = False
+                    for key, value in extracted_data_dict.items():
+                        if value and (key not in merged_data or not merged_data[key]): # Merge if new or if old was empty
+                            merged_data[key] = value
+                            updated = True
+                    if updated:
+                        inquiry_extracted_data.data = merged_data
+                        # Re-validate after merge
+                        merged_missing = [field for field in essential_fields if not merged_data.get(field)]
+                        current_validation_status = "Incomplete" if merged_missing else "Complete"
+                        inquiry_extracted_data.missing_fields = ",".join(merged_missing) if merged_missing else None
+                        inquiry_extracted_data.extraction_source = extraction_source or 'whatsapp_merged_extraction' # Update source
+                        logging.info(f"{log_prefix} Merged data updated. New validation status for ExtractedData: {current_validation_status}")
+                    else:
+                        logging.info(f"{log_prefix} No new data merged into ExtractedData for Inquiry {inquiry.id}.")
+                        # Use existing validation status if no new data merged
+                        current_validation_status = inquiry_extracted_data.validation_status 
+                
+                # Update Inquiry status based on extraction results
+                inquiry.status = current_validation_status
+                logging.info(f"{log_prefix} Updated Inquiry {inquiry.id} status to '{inquiry.status}' based on extraction.")
+            elif new_inquiry_created: # No data extracted, but it's a new inquiry from WhatsApp
+                inquiry.status = 'new_whatsapp' # Remains 'new_whatsapp' or could be 'Incomplete' if preferred
+                logging.info(f"{log_prefix} No data extracted. Inquiry {inquiry.id} status remains/set to '{inquiry.status}'.")
+            # If not new_inquiry_created and no data extracted, inquiry status remains as it was before this message.
+
+            db.session.commit()
+            logging.info(f"{log_prefix} Successfully processed WhatsApp message ID {id_message} and committed to DB.")
+            return {"status": "success", "inquiry_id": inquiry.id, "whatsapp_message_id": new_wa_message.id}
+
+        except IntegrityError as ie:
+            db.session.rollback()
+            # Check if it's a duplicate WhatsAppMessage ID error
+            if "whatsapp_messages_pkey" in str(ie).lower() or (id_message and db.session.query(WhatsAppMessage).get(id_message)):
+                logging.warning(f"{log_prefix} IntegrityError likely due to duplicate WhatsApp Message ID {id_message}. Marking as skipped. Error: {ie}")
+                return {"status": "skipped", "message": f"Duplicate WhatsApp message ID {id_message}"}
+            else:
+                logging.error(f"{log_prefix} Database integrity error during WhatsApp processing: {ie}", exc_info=True)
+                raise # Re-raise for the main task handler to mark PendingTask as failed
+        except Exception as e:
+            db.session.rollback()
+            logging.error(f"{log_prefix} Unhandled error processing WhatsApp message: {e}", exc_info=True)
+            raise # Re-raise for the main task handler
+
+
 # Task handler dispatcher for the new worker
 # The worker will call this function with the task_type and payload.
 def handle_task(task_type, payload, app_for_context):
@@ -408,19 +643,28 @@ def handle_task(task_type, payload, app_for_context):
         app_for_context: The Flask application instance for establishing context.
     """
     logging.info(f"[TaskDispatcher] Received task: {task_type}")
-    with app_for_context.app_context():
-        if task_type == 'process_single_email':
-            return handle_process_single_email(payload)
-        elif task_type == 'poll_all_new_emails':
-            # The payload for 'poll_all_new_emails' might be empty or contain polling parameters
-            logging.info(f"[TaskDispatcher] Handling 'poll_all_new_emails' task.")
-            poll_new_emails(app_for_context) # Call the main polling function
-            # poll_new_emails will raise an exception if it fails, which the worker should catch.
-            # If it completes without error, the worker marks the task successful.
-            return {"status": "success", "message": "Email polling cycle initiated/completed."} 
-        # Add other task types here
-        # elif task_type == 'process_whatsapp_message':
-        #    return handle_process_whatsapp_message(payload)
-        else:
-            logging.error(f"[TaskDispatcher] Unknown task type: {task_type}")
-            raise ValueError(f"Unknown task type: {task_type}") 
+    # Ensure we are operating within the provided app_context
+    # The caller (e.g., Postgres worker) should establish the app_context before calling this.
+    # However, if app_for_context is passed, we should use it to ensure context is correct.
+    # Using current_app directly might be problematic if called from a detached thread/process
+    # without an active app context pushed by the caller.
+    
+    # The `with app_for_context.app_context():` block is generally handled by the caller of individual handlers.
+    # The handlers themselves (like handle_process_single_email) then re-establish context
+    # or assume it's present. For clarity, let's assume the app_for_context IS the app to use.
+
+    if task_type == 'process_single_email':
+        # handle_process_single_email itself manages its app context using current_app or passed app
+        return handle_process_single_email(payload)
+    elif task_type == 'poll_all_new_emails':
+        # poll_new_emails takes app_instance and establishes context
+        logging.info(f"[TaskDispatcher] Handling 'poll_all_new_emails' task.")
+        poll_new_emails(app_for_context) 
+        return {"status": "success", "message": "Email polling cycle initiated/completed."}
+    elif task_type == 'process_whatsapp_message':
+        logging.info(f"[TaskDispatcher] Handling 'process_whatsapp_message' task.")
+        # Pass the app_for_context to the new handler
+        return handle_new_whatsapp_message(payload, app_for_context)
+    else:
+        logging.error(f"[TaskDispatcher] Unknown task type: {task_type}")
+        raise ValueError(f"Unknown task type: {task_type}") 

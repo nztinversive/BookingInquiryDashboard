@@ -76,9 +76,9 @@
                     {% elif item.type == 'whatsapp' %}
                         <p class="card-text">{{ item.data.body if item.data.body else '(No text content)' }}</p>
                         {% if item.data.media_url %}
-                            <p><a href="{{ item.data.media_url }}" target="_blank">View Media</a> ({{ item.data.media_mime_type if item.data.media_mime_type else 'media' }})</p>
-                                {% endif %}
-                                    {% endif %}
+                            <p><i class="fas fa-paperclip me-1"></i> <a href="{{ item.data.media_url }}" target="_blank" rel="noopener noreferrer">View Media</a> ({{ item.data.media_mime_type if item.data.media_mime_type else 'media' }})</p>
+                        {% endif %}
+                    {% endif %}
                 </div>
                 {% if item.type == 'email' %}
                 <div class="card-footer text-muted">
