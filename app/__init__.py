@@ -92,6 +92,13 @@ def create_app():
             db_uri_log = "[Could not parse DB URI for logging]"
     logging.info(f"Database URI set to: {db_uri_log}")
 
+    # Add SQLAlchemy engine options for connection pooling
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,
+        'pool_recycle': 290,  # Recycle connections slightly before a potential 5-min timeout
+    }
+    logging.info(f"SQLAlchemy engine options configured with pool_pre_ping=True, pool_recycle=290.")
+
     # --- Initialize Extensions with App ---
     db.init_app(app)
     login_manager.init_app(app)
