@@ -2,6 +2,7 @@ import logging
 import os
 import time
 from datetime import datetime, timezone, timedelta
+import json
 
 import psycopg2 # For potential direct DB error handling, though SQLAlchemy is primary
 from sqlalchemy import create_engine, text, func
@@ -83,7 +84,7 @@ def process_pending_tasks(app, db_session_factory):
                 task_to_process = db_sess.get(PendingTask, task_id)
 
                 if task_to_process:
-                    logger.info(f"[Task {task_id}] Claimed task. Type: {task_to_process.task_type}. Attempts: {task_to_process.attempts}")
+                    logger.info(f"[Task {task_id}] Claimed task. Type: {task_to_process.task_type}. Attempts: {task_to_process.attempts}", flush=True)
                     task_to_process.status = 'processing'
                     task_to_process.attempts += 1
                     db_sess.commit() # Commit status change before processing
@@ -92,44 +93,44 @@ def process_pending_tasks(app, db_session_factory):
                     task_type = task_to_process.task_type
 
                     try:
-                        logger.info(f"[Task {task_id}] Executing task type: {task_type}")
+                        logger.info(f"[Task {task_id}] Executing task type: {task_type}", flush=True)
                         # The handle_task function needs the Flask app instance for its own context
                         handle_task_result = handle_task(task_type, task_payload, app)
                         task_to_process.status = 'success'
                         task_to_process.processed_at = datetime.now(timezone.utc)
                         task_to_process.last_error = None
-                        logger.info(f"[Task {task_id}] Successfully processed. Result: {handle_task_result}")
+                        logger.info(f"[Task {task_id}] Successfully processed. Result: {handle_task_result}", flush=True)
                     except Exception as task_exec_err:
-                        logger.error(f"[Task {task_id}] Error executing task: {task_exec_err}", exc_info=True)
+                        logger.error(f"[Task {task_id}] Error executing task: {task_exec_err}", exc_info=True, flush=True)
                         task_to_process.last_error = str(task_exec_err)
                         if task_to_process.attempts >= MAX_TASK_RETRIES:
                             task_to_process.status = 'failed' # Max retries reached
-                            logger.warning(f"[Task {task_id}] Max retries ({MAX_TASK_RETRIES}) reached. Marking as failed.")
+                            logger.warning(f"[Task {task_id}] Max retries ({MAX_TASK_RETRIES}) reached. Marking as failed.", flush=True)
                         else:
                             task_to_process.status = 'pending' # Revert to pending for retry
                             # Exponential backoff for retry
                             backoff_seconds = RETRY_BACKOFF_BASE_SECONDS * (2 ** (task_to_process.attempts -1))
                             task_to_process.scheduled_for = datetime.now(timezone.utc) + timedelta(seconds=backoff_seconds)
-                            logger.info(f"[Task {task_id}] Scheduled for retry at {task_to_process.scheduled_for.isoformat()} (attempt {task_to_process.attempts}).")
+                            logger.info(f"[Task {task_id}] Scheduled for retry at {task_to_process.scheduled_for.isoformat()} (attempt {task_to_process.attempts}).", flush=True)
                     finally:
                         # Always commit the final state of the task (success, failed, or pending for retry)
                         if db_sess.is_active:
                              db_sess.commit()
                 else:
                     # This case should be rare if the SELECT FOR UPDATE worked as expected
-                    logger.warning("Claimed a task ID but could not fetch the task object. Race condition or DB issue?")
+                    logger.warning("Claimed a task ID but could not fetch the task object. Race condition or DB issue?", flush=True)
             else:
                 # No tasks found, sleep before polling again
                 # logger.debug("No pending tasks found. Sleeping...") # Too verbose for INFO
                 pass # Fall through to sleep
 
         except OperationalError as op_err:
-            logger.error(f"Database operational error: {op_err}. Retrying connection or sleeping.", exc_info=True)
+            logger.error(f"Database operational error: {op_err}. Retrying connection or sleeping.", exc_info=True, flush=True)
             if db_sess and db_sess.is_active:
                 db_sess.rollback() # Rollback on DB errors
             time.sleep(WORKER_LOOP_SLEEP_SECONDS * 2) # Longer sleep on DB connection issues
         except Exception as e:
-            logger.error(f"An unexpected error occurred in the worker loop: {e}", exc_info=True)
+            logger.error(f"An unexpected error occurred in the worker loop: {e}", exc_info=True, flush=True)
             if db_sess and db_sess.is_active:
                 db_sess.rollback()
             # Avoid tight loop on unexpected persistent errors
@@ -143,17 +144,20 @@ def process_pending_tasks(app, db_session_factory):
             time.sleep(WORKER_LOOP_SLEEP_SECONDS)
 
 if __name__ == "__main__":
+    print("POSTGRES_WORKER_SCRIPT_STARTED_EXECUTION_V2", flush=True) # New, distinct print
+    # Configure logging
+    log_level_str = os.environ.get("LOG_LEVEL", "INFO").upper()
     app_instance = None
     db_session_factory_instance = None
     try:
         app_instance, db_session_factory_instance = initialize_worker_app()
         logger.info("Worker initialization complete. Starting task processing loop.")
     except Exception as init_err:
-        logger.critical(f"Worker failed to initialize: {init_err}", exc_info=True)
+        logger.critical(f"Worker failed to initialize: {init_err}", exc_info=True, flush=True)
         exit(1)
 
     if app_instance and db_session_factory_instance:
         process_pending_tasks(app_instance, db_session_factory_instance)
     else:
-        logger.critical("Application or DB session factory not initialized. Worker cannot start.")
+        logger.critical("Application or DB session factory not initialized. Worker cannot start.", flush=True)
         exit(1) 

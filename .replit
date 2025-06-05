@@ -31,7 +31,7 @@ task = "packager.installForAll"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python postgres_worker.py &"
+args = "python postgres_worker.py > postgres_worker.log 2>&1 &"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
