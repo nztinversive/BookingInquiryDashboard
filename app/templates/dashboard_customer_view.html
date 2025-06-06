@@ -3,41 +3,219 @@
 
 {% block title %}Customer Dashboard - {{ super() }}{% endblock %}
 
+{% block head %}
+<style>
+/* Enhanced Dashboard Styles */
+.inquiry-status-badge {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-complete { background: linear-gradient(45deg, #10b981, #34d399); }
+.status-incomplete { background: linear-gradient(45deg, #f59e0b, #fbbf24); }
+.status-new { background: linear-gradient(45deg, #3b82f6, #60a5fa); }
+.status-error { background: linear-gradient(45deg, #ef4444, #f87171); }
+
+.inquiry-card {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    transition: all 0.2s ease;
+    background: rgba(30, 41, 59, 0.8);
+    backdrop-filter: blur(10px);
+}
+
+.inquiry-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(99, 102, 241, 0.3);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+}
+
+.priority-high { border-left: 4px solid #ef4444; }
+.priority-medium { border-left: 4px solid #f59e0b; }
+.priority-low { border-left: 4px solid #10b981; }
+
+.quick-stats {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+    border-radius: 1rem;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.filter-chips .chip {
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 2rem;
+    padding: 0.5rem 1rem;
+    margin: 0.25rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-block;
+}
+
+.filter-chips .chip:hover,
+.filter-chips .chip.active {
+    background: rgba(99, 102, 241, 0.2);
+    transform: translateY(-1px);
+}
+
+.search-enhanced {
+    border-radius: 2rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(30, 41, 59, 0.8);
+    padding: 0.75rem 1.5rem;
+}
+
+.missing-data { 
+    color: #94a3b8; 
+    font-style: italic; 
+}
+
+.customer-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: linear-gradient(45deg, #6366f1, #8b5cf6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.info-item {
+    background: rgba(255, 255, 255, 0.02);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.progress-indicator {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 0.5rem;
+}
+
+.progress-bar {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid py-4">
-    <div class="row mb-3">
-        <div class="col-12 d-flex justify-content-between align-items-center">
-            <h2 class="text-white">Customer View</h2>
-            <div>
-                <a href="{{ url_for('main.all_inquiries_dashboard') }}" class="btn btn-sm btn-outline-light me-2">All Inquiries View</a>
-                <button type="button" class="btn btn-sm btn-outline-light" data-bs-toggle="modal" data-bs-target="#manualPollModalCustomerView">
-                    <i class="fas fa-sync-alt me-1"></i> Manual Email Poll
-                </button>
+    <!-- Header with improved controls -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h2 class="text-white mb-0">
+                        <i class="fas fa-users me-2"></i>Customer Inquiries
+                    </h2>
+                    <p class="text-secondary mb-0">Manage and track customer travel requests</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('main.all_inquiries_dashboard') }}" class="btn btn-outline-light">
+                        <i class="fas fa-list me-1"></i> All Inquiries
+                    </a>
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#manualPollModalCustomerView">
+                        <i class="fas fa-sync-alt me-1"></i> Sync Emails
+                    </button>
+                </div>
+            </div>
+
+            <!-- Quick Stats Row -->
+            <div class="quick-stats p-3 mb-4">
+                <div class="row">
+                    <div class="col-md-3 col-6 text-center">
+                        <div class="d-flex flex-column">
+                            <span class="h4 text-white mb-0" id="total-count">{{ customer_items|length }}</span>
+                            <span class="text-secondary">Total Inquiries</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6 text-center">
+                        <div class="d-flex flex-column">
+                            <span class="h4 text-success mb-0" id="complete-count">
+                                {{ customer_items|selectattr('inquiry.status', 'in', ['Complete', 'Manually Corrected'])|list|length }}
+                            </span>
+                            <span class="text-secondary">Completed</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6 text-center">
+                        <div class="d-flex flex-column">
+                            <span class="h4 text-warning mb-0" id="pending-count">
+                                {{ customer_items|selectattr('inquiry.status', 'in', ['new', 'Incomplete', 'new_whatsapp'])|list|length }}
+                            </span>
+                            <span class="text-secondary">Pending</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6 text-center">
+                        <div class="d-flex flex-column">
+                            <span class="h4 text-info mb-0">
+                                {% set total_cost = customer_items|selectattr('data')|map(attribute='data.data.trip_cost')|select('string')|map('float', 0)|sum %}
+                                ${{ "%.0f"|format(total_cost) if total_cost > 0 else "0" }}
+                            </span>
+                            <span class="text-secondary">Total Value</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Manual Poll Modal -->
-    <div class="modal fade" id="manualPollModalCustomerView" tabindex="-1" aria-labelledby="manualPollModalLabelCustomerView" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="manualPollModalLabelCustomerView">Manual Email Poll</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Are you sure you want to manually poll for new emails?</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <form action="{{ url_for('main.manual_email_poll_route') }}" method="POST">
-                        <button type="submit" class="btn btn-primary">Poll Now</button>
-                    </form>
+    <!-- Enhanced Search and Filters -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body p-3">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <span class="input-group-text bg-transparent border-0">
+                                    <i class="fas fa-search text-secondary"></i>
+                                </span>
+                                <input type="text" class="form-control search-enhanced border-0" 
+                                       placeholder="Search customers, destinations, or inquiry details..." 
+                                       id="inquirySearch">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="filter-chips text-end">
+                                <span class="chip active" data-filter="all">
+                                    <i class="fas fa-list me-1"></i> All
+                                </span>
+                                <span class="chip" data-filter="complete">
+                                    <i class="fas fa-check-circle me-1"></i> Complete
+                                </span>
+                                <span class="chip" data-filter="pending">
+                                    <i class="fas fa-clock me-1"></i> Pending
+                                </span>
+                                <span class="chip" data-filter="high-value">
+                                    <i class="fas fa-star me-1"></i> High Value
+                                </span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Flash Messages -->
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             {% for category, message in messages %}
@@ -49,84 +227,165 @@
         {% endif %}
     {% endwith %}
 
-    <div class="row">
-        <div class="col-12">
-            <div class="card shadow-lg">
-                <div class="card-header pb-0">
-                    <h5 class="mb-0">All Customer Inquiries</h5>
-                </div>
-                <div class="card-body px-0 pt-0 pb-2">
-                    <div class="table-responsive p-0">
-                        <table class="table align-items-center mb-0">
-                            <thead>
-                                <tr>
-                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Customer Name</th>
-                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Destination</th>
-                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Travel Dates</th>
-                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Trip Cost</th>
-                                    <th class="text-center text-uppercase text-secondary text-xxs font-weight-bolder opacity-7"># Travelers</th>
-                                    <th class_="text-secondary opacity-7"></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% if customer_items %}
-                                    {% for item in customer_items %}
-                                    <tr>
-                                        <td>
-                                            <div class="d-flex px-2 py-1">
-                                                <div>
-                                                    <!-- You can add an icon here based on some logic if desired -->
-                                                    <i class="fas fa-user-circle fa-lg me-2 align-middle text-secondary"></i> 
-                                                </div>
-                                                <div class="d-flex flex-column justify-content-center">
-                                                    <h6 class="mb-0 text-sm">
-                                                        <a href="{{ url_for('main.inquiry_detail', inquiry_id=item.inquiry.id) }}">
-                                                            {{ item.display_name | truncate(50) }}
-                                                        </a>
-                                                    </h6>
-                                                    <p class="text-xs text-secondary mb-0">Inquiry #{{ item.inquiry.id }}</p>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <p class="text-xs font-weight-bold mb-0">
-                                                {{ item.data.data.get('trip_destination', 'N/A') if item.data else 'N/A' }}
-                                            </p>
-                                        </td>
-                                        <td>
-                                            <p class="text-xs font-weight-bold mb-0">
-                                                Start: {{ item.data.data.get('travel_start_date', 'N/A') if item.data else 'N/A' }}
-                                            </p>
-                                            <p class="text-xs text-secondary mb-0">
-                                                End: {{ item.data.data.get('travel_end_date', 'N/A') if item.data else 'N/A' }}
-                                            </p>
-                                        </td>
-                                        <td>
-                                            <p class="text-xs font-weight-bold mb-0">
-                                                {{ item.data.data.get('trip_cost', 'N/A') if item.data else 'N/A' }}
-                                            </p>
-                                        </td>
-                                        <td class="align-middle text-center text-sm">
-                                            <span class="badge badge-sm bg-gradient-info">{{ item.num_travelers }}</span>
-                                        </td>
-                                        <td class="align-middle">
-                                            <a href="{{ url_for('main.inquiry_detail', inquiry_id=item.inquiry.id) }}" class="btn btn-link text-secondary mb-0" data-bs-toggle="tooltip" data-bs-placement="top" title="View Details">
-                                                <i class="fas fa-eye"></i> View
-                                            </a>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                {% else %}
-                                    <tr>
-                                        <td colspan="6" class="text-center py-5">
-                                            <p class="text-muted">No customer inquiries found.</p>
-                                        </td>
-                                    </tr>
-                                {% endif %}
-                            </tbody>
-                        </table>
+    <!-- Improved Customer Cards Layout -->
+    <div class="row" id="inquiriesContainer">
+        {% if customer_items %}
+            {% for item in customer_items %}
+            {% set status_class = 'complete' if item.inquiry.status in ['Complete', 'Manually Corrected'] else 'pending' if item.inquiry.status in ['new', 'Incomplete', 'new_whatsapp'] else 'error' %}
+            {% set trip_cost = item.data.data.get('trip_cost', '0') if item.data else '0' %}
+            {% set cost_value = trip_cost|float if trip_cost and trip_cost != 'N/A' else 0 %}
+            {% set priority_class = 'priority-high' if cost_value > 5000 else 'priority-medium' if cost_value > 2000 else 'priority-low' %}
+            
+            <div class="col-lg-6 col-12 mb-4 inquiry-item" 
+                 data-status="{{ status_class }}" 
+                 data-cost="{{ cost_value }}"
+                 data-search="{{ item.display_name|lower }} {{ item.data.data.get('trip_destination', '')|lower if item.data else '' }} {{ item.inquiry.primary_email_address|lower }}">
+                
+                <div class="inquiry-card {{ priority_class }} p-4 h-100">
+                    <!-- Header Row -->
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div class="d-flex align-items-center">
+                            <div class="customer-avatar me-3">
+                                {{ item.display_name[:2]|upper }}
+                            </div>
+                            <div>
+                                <h5 class="text-white mb-1">
+                                    <a href="{{ url_for('main.inquiry_detail', inquiry_id=item.inquiry.id) }}" 
+                                       class="text-decoration-none text-white">
+                                        {{ item.display_name }}
+                                    </a>
+                                </h5>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge inquiry-status-badge status-{{ status_class }}">
+                                        {{ item.inquiry.status }}
+                                    </span>
+                                    <small class="text-secondary">ID: #{{ item.inquiry.id }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            {% if cost_value > 0 %}
+                                <div class="h4 text-success mb-0">${{ "%.0f"|format(cost_value) }}</div>
+                                <small class="text-secondary">Trip Value</small>
+                            {% else %}
+                                <div class="text-secondary">
+                                    <i class="fas fa-dollar-sign"></i>
+                                    <small>Pending Quote</small>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Trip Details Grid -->
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="d-flex align-items-center mb-1">
+                                <i class="fas fa-map-marker-alt text-primary me-2"></i>
+                                <span class="text-secondary small">Destination</span>
+                            </div>
+                            <div class="text-white fw-medium">
+                                {{ item.data.data.get('trip_destination', 'Not specified')|title if item.data else 'Not specified' }}
+                            </div>
+                        </div>
+
+                        <div class="info-item">
+                            <div class="d-flex align-items-center mb-1">
+                                <i class="fas fa-calendar text-warning me-2"></i>
+                                <span class="text-secondary small">Travel Dates</span>
+                            </div>
+                            {% if item.data and item.data.data.get('travel_start_date') and item.data.data.get('travel_start_date') != 'N/A' %}
+                                <div class="text-white fw-medium">
+                                    {{ item.data.data.get('travel_start_date') }}
+                                    {% if item.data.data.get('travel_end_date') and item.data.data.get('travel_end_date') != 'N/A' %}
+                                        <br><small class="text-secondary">to {{ item.data.data.get('travel_end_date') }}</small>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <div class="missing-data">Dates not provided</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="info-item">
+                            <div class="d-flex align-items-center mb-1">
+                                <i class="fas fa-users text-info me-2"></i>
+                                <span class="text-secondary small">Travelers</span>
+                            </div>
+                            <div class="text-white fw-medium">
+                                {{ item.num_travelers }} {{ 'person' if item.num_travelers == 1 else 'people' }}
+                            </div>
+                        </div>
+
+                        <div class="info-item">
+                            <div class="d-flex align-items-center mb-1">
+                                <i class="fas fa-envelope text-secondary me-2"></i>
+                                <span class="text-secondary small">Contact</span>
+                            </div>
+                            <div class="text-white fw-medium small">
+                                {{ item.inquiry.primary_email_address }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Progress Indicator -->
+                    {% set data_completeness = 0 %}
+                    {% if item.data %}
+                        {% set required_fields = ['first_name', 'last_name', 'travel_start_date', 'travel_end_date', 'trip_destination'] %}
+                        {% set filled_fields = required_fields|select('in', item.data.data.keys())|select('ne', 'N/A')|list|length %}
+                        {% set data_completeness = (filled_fields / required_fields|length * 100)|round %}
+                    {% endif %}
+                    
+                    <div class="d-flex justify-content-between align-items-center mt-3">
+                        <div class="flex-grow-1 me-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <small class="text-secondary">Data Completeness</small>
+                                <small class="text-secondary">{{ data_completeness }}%</small>
+                            </div>
+                            <div class="progress-indicator">
+                                <div class="progress-bar bg-{{ 'success' if data_completeness > 80 else 'warning' if data_completeness > 40 else 'danger' }}" 
+                                     style="width: {{ data_completeness }}%"></div>
+                            </div>
+                        </div>
+                        <a href="{{ url_for('main.inquiry_detail', inquiry_id=item.inquiry.id) }}" 
+                           class="btn btn-outline-light btn-sm">
+                            <i class="fas fa-arrow-right me-1"></i> View Details
+                        </a>
                     </div>
                 </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-12">
+                <div class="card text-center py-5">
+                    <div class="card-body">
+                        <i class="fas fa-inbox fa-3x text-secondary mb-3"></i>
+                        <h4 class="text-secondary">No Customer Inquiries Yet</h4>
+                        <p class="text-muted">New inquiries will appear here as they come in via email or WhatsApp.</p>
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#manualPollModalCustomerView">
+                            <i class="fas fa-sync-alt me-2"></i>Check for New Messages
+                        </button>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Manual Poll Modal -->
+<div class="modal fade" id="manualPollModalCustomerView" tabindex="-1" aria-labelledby="manualPollModalLabelCustomerView" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="manualPollModalLabelCustomerView">Manual Email Poll</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to manually poll for new emails?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <form action="{{ url_for('main.manual_email_poll_route') }}" method="POST">
+                    <button type="submit" class="btn btn-primary">Poll Now</button>
+                </form>
             </div>
         </div>
     </div>
@@ -135,12 +394,75 @@
 
 {% block scripts %}
 {{ super() }}
-<!-- Add any specific JS for this page if needed -->
 <script>
-    // Initialize Bootstrap tooltips
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+document.addEventListener('DOMContentLoaded', function() {
+    // Enhanced search functionality
+    const searchInput = document.getElementById('inquirySearch');
+    const inquiryItems = document.querySelectorAll('.inquiry-item');
+    const filterChips = document.querySelectorAll('.filter-chips .chip');
+    
+    let currentFilter = 'all';
+    
+    // Search functionality
+    searchInput.addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase().trim();
+        filterInquiries(searchTerm, currentFilter);
+    });
+    
+    // Filter functionality
+    filterChips.forEach(chip => {
+        chip.addEventListener('click', function() {
+            // Update active chip
+            filterChips.forEach(c => c.classList.remove('active'));
+            this.classList.add('active');
+            
+            currentFilter = this.dataset.filter;
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            filterInquiries(searchTerm, currentFilter);
+        });
+    });
+    
+    function filterInquiries(searchTerm, filter) {
+        let visibleCount = 0;
+        
+        inquiryItems.forEach(item => {
+            const searchData = item.dataset.search;
+            const status = item.dataset.status;
+            const cost = parseFloat(item.dataset.cost);
+            
+            let matchesSearch = !searchTerm || searchData.includes(searchTerm);
+            let matchesFilter = true;
+            
+            switch(filter) {
+                case 'complete':
+                    matchesFilter = status === 'complete';
+                    break;
+                case 'pending':
+                    matchesFilter = status === 'pending';
+                    break;
+                case 'high-value':
+                    matchesFilter = cost > 3000;
+                    break;
+                case 'all':
+                default:
+                    matchesFilter = true;
+            }
+            
+            if (matchesSearch && matchesFilter) {
+                item.style.display = 'block';
+                item.style.animation = 'fadeIn 0.3s ease';
+                visibleCount++;
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+    
+    // Initialize tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl)
-    })
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
 </script>
 {% endblock %} 
