@@ -359,7 +359,7 @@ def poll_new_emails(app_instance):
 # Placeholder for a task that triggers polling, to be called by APScheduler
 def trigger_email_polling_task_creation():
     """
-    Scheduled job to create a 'poll_new_emails_task' in the PendingTask table.
+    Scheduled job to create a 'poll_all_new_emails' task in the PendingTask table.
     This function needs to establish its own Flask app context to interact with the database
     when run by APScheduler.
     """
@@ -384,9 +384,9 @@ def trigger_email_polling_task_creation():
         from . import db  # Imports db associated with job_app
         from .models import PendingTask # Imports models related to job_app's SQLAlchemy instance
 
-        logging.info("[SchedulerCallback] APScheduler triggered: Creating a 'poll_new_emails_task'.")
+        logging.info("[SchedulerCallback] APScheduler triggered: Creating a 'poll_all_new_emails' task.")
         try:
-            new_task = PendingTask(task_type='poll_new_emails_task', payload={})
+            new_task = PendingTask(task_type='poll_all_new_emails', payload={})
             db.session.add(new_task)
             db.session.commit()
             logging.info(f"[SchedulerCallback] Successfully created PendingTask ID {new_task.id} for email polling.")
@@ -395,7 +395,7 @@ def trigger_email_polling_task_creation():
             logging.error(f"[SchedulerCallback] IntegrityError when creating polling task: {e}. This might indicate an issue with task uniqueness or DB connection.", exc_info=True)
         except Exception as e:
             db.session.rollback()
-            logging.error(f"[SchedulerCallback] Failed to create 'poll_new_emails_task' due to: {e}", exc_info=True)
+            logging.error(f"[SchedulerCallback] Failed to create 'poll_all_new_emails' task due to: {e}", exc_info=True)
 
 # New function to handle WhatsApp messages:
 def handle_new_whatsapp_message(payload, app_for_context_param):
