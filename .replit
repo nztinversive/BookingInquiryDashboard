@@ -5,7 +5,7 @@ channel = "stable-24_05"
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["gunicorn", "--bind", "0.0.0.0:5000", "main:app"]
+run = ["python", "run_production_simple.py"]
 
 [workflows]
 runButton = "Project"
@@ -31,11 +31,7 @@ task = "packager.installForAll"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python postgres_worker.py > postgres_worker.log 2>&1 &"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "gunicorn --bind 0.0.0.0:5000 --reuse-port --reload main:app"
+args = "python run_production_simple.py"
 waitForPort = 5000
 
 [[ports]]
