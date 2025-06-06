@@ -274,9 +274,9 @@
                     </h3>
                     <a href="{{ url_for('main.edit_extracted_data_form', data_id=inquiry.extracted_data.id) }}" 
                        class="btn btn-outline-primary btn-sm">
-                        <i class="fas fa-edit me-1"></i> Edit Data
-                    </a>
-                </div>
+                    <i class="fas fa-edit me-1"></i> Edit Data
+                </a>
+            </div>
 
                 <div class="detail-grid">
                     {% set data = inquiry.extracted_data.data %}
@@ -307,13 +307,13 @@
                                 {{ data.get('travel_start_date') }}
                                 {% if data.get('travel_end_date') and data.get('travel_end_date') != 'N/A' %}
                                     <br><small class="text-secondary">to {{ data.get('travel_end_date') }}</small>
-                                {% endif %}
-                            {% else %}
+            {% endif %}
+            {% else %}
                                 <span class="text-muted">Dates not provided</span>
-                            {% endif %}
-                        </div>
-                    </div>
-
+            {% endif %}
+                                        </div>
+                                    </div>
+                                    
                     <div class="detail-item">
                         <div class="detail-item-label">
                             <i class="fas fa-dollar-sign me-1"></i> Trip Budget
@@ -368,29 +368,29 @@
                     <i class="fas fa-comments me-2"></i>Communication Timeline
                 </h3>
 
-                {% if timeline %}
-                    {% for item in timeline %}
+    {% if timeline %}
+        {% for item in timeline %}
                     <div class="timeline-item communication-type-{{ item.type }}">
                         <div class="timeline-header">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div class="d-flex align-items-center">
-                                    {% if item.type == 'email' %}
+                        {% if item.type == 'email' %}
                                         <i class="fas fa-envelope text-primary me-2"></i>
                                         <strong>Email from {{ item.sender_email }}</strong>
-                                    {% elif item.type == 'whatsapp' %}
+                        {% elif item.type == 'whatsapp' %}
                                         <i class="fab fa-whatsapp text-success me-2"></i>
                                         <strong>WhatsApp {{ 'from Me' if item.data.from_me else 'from ' + item.data.sender_number }}</strong>
-                                    {% endif %}
+                        {% endif %}
                                 </div>
                                 <small class="text-secondary">
                                     <i class="fas fa-clock me-1"></i>
                                     {{ item.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}
                                 </small>
                             </div>
-                        </div>
+                                        </div>
 
                         <div class="timeline-body">
-                            {% if item.type == 'email' %}
+                    {% if item.type == 'email' %}
                                 <h5 class="text-white mb-2">{{ item.subject }}</h5>
                                 {% if item.recipient_email %}
                                     <p class="text-secondary mb-2">
@@ -411,11 +411,11 @@
                                         {% endif %}
                                     </div>
                                 {% endif %}
-                            {% elif item.type == 'whatsapp' %}
+                    {% elif item.type == 'whatsapp' %}
                                 {% if item.data.body %}
                                     <div class="message-content">{{ item.data.body }}</div>
                                 {% endif %}
-                                {% if item.data.media_url %}
+                        {% if item.data.media_url %}
                                     <div class="mt-2">
                                         <a href="{{ item.data.media_url }}" target="_blank" 
                                            class="btn btn-outline-light btn-sm">
@@ -428,8 +428,8 @@
                                     <div class="text-muted">
                                         <em>No text or media content</em>
                                     </div>
-                                {% endif %}
-                            {% endif %}
+                        {% endif %}
+                    {% endif %}
                         </div>
                     </div>
                     {% endfor %}
@@ -470,7 +470,7 @@
                 </div>
                 {% endif %}
             </div>
-            {% endif %}
+                    {% endif %}
 
             <!-- Inquiry Metadata -->
             <div class="detail-section">
@@ -519,8 +519,8 @@
                    class="btn btn-primary w-100 mb-2">
                     <i class="fas fa-edit me-2"></i>Edit Travel Data
                 </a>
-                {% endif %}
-                
+    {% endif %}
+
                 <button type="button" class="btn btn-outline-light w-100 mb-2" 
                         data-bs-toggle="modal" data-bs-target="#exportModal">
                     <i class="fas fa-download me-2"></i>Export Data
@@ -587,7 +587,7 @@ function exportAsJSON() {
 function copyToClipboard() {
     const data = {
         inquiry_id: {{ inquiry.id }},
-        customer: "{{ customer_name.strip() if customer_name.strip() else inquiry.primary_email_address }}",
+        customer: "{{ inquiry.primary_email_address }}",
         status: "{{ inquiry.status }}",
         {% if inquiry.extracted_data %}
         extracted_data: {{ inquiry.extracted_data.data | tojson }}

@@ -313,13 +313,21 @@ def extract_data_with_openai(content):
     logging.info("Preparing OpenAI call for data extraction...")
     system_message = """You are a specialized AI assistant for extracting travel insurance data from emails and documents.
 Your task is to accurately identify and extract the following fields and return them ONLY as a valid JSON object.
+
+IMPORTANT DATE HANDLING RULES:
+- All dates must be standardized to YYYY-MM-DD format
+- For travel dates (travel_start_date, travel_end_date), if no year is specified, assume the next occurrence of that date (2025 or 2026 if needed)
+- Travel dates should NEVER be in the past unless explicitly specified
+- For birth dates, use the year if provided, otherwise return null
+- Deposit dates should be reasonable relative to travel dates
+
 Fields:
 - first_name: The primary traveler's first name (string or null).
 - last_name: The primary traveler's last name (string or null).
 - home_address: Their full home address (Street, City, State, Zip) (string or null).
 - date_of_birth: Primary traveler's date of birth (standardize to YYYY-MM-DD, string or null).
-- travel_start_date: Trip start date (standardize to YYYY-MM-DD, string or null).
-- travel_end_date: Trip end date (standardize to YYYY-MM-DD, string or null).
+- travel_start_date: Trip start date (standardize to YYYY-MM-DD, assume future year if not specified, string or null).
+- travel_end_date: Trip end date (standardize to YYYY-MM-DD, assume future year if not specified, string or null).
 - trip_cost: The total cost of the trip (numeric, e.g., 1234.56 or null).
 - trip_destination: The primary destination(s) (string, e.g., "Paris, France" or null).
 - email: Their primary email address (string or null).
@@ -472,6 +480,36 @@ def extract_travel_data(email_body_html):
 
     final_data["cost_per_traveler"] = cost_per_traveler
 
+    # 6. Post-process travel dates to ensure they're not in the past
+    from datetime import datetime, timedelta
+    current_date = datetime.now().date()
+    
+    for date_field in ['travel_start_date', 'travel_end_date']:
+        date_str = final_data.get(date_field)
+        if date_str:
+            try:
+                # Parse the date
+                parsed_date = None
+                formats_to_try = ["%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y", "%Y/%m/%d", "%b %d, %Y", "%B %d, %Y"]
+                for fmt in formats_to_try:
+                    try:
+                        date_only_str = date_str.split('T')[0]
+                        parsed_date = datetime.strptime(date_only_str, fmt).date()
+                        break
+                    except ValueError:
+                        continue
+                
+                if parsed_date and parsed_date < current_date:
+                    # Date is in the past, adjust to next year
+                    next_year_date = parsed_date.replace(year=current_date.year + 1)
+                    final_data[date_field] = next_year_date.strftime("%Y-%m-%d")
+                    logging.info(f"Adjusted {date_field} from past date {date_str} to future date {final_data[date_field]}")
+                elif parsed_date:
+                    # Ensure consistent formatting
+                    final_data[date_field] = parsed_date.strftime("%Y-%m-%d")
+                    
+            except Exception as date_err:
+                logging.warning(f"Error processing {date_field} '{date_str}': {date_err}")
 
     logging.info(f"Extraction finished. Source: {source}")
     return final_data, source 

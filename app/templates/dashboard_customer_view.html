@@ -122,7 +122,7 @@
     <div class="row mb-4">
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <div>
+            <div>
                     <h2 class="text-white mb-0">
                         <i class="fas fa-users me-2"></i>Customer Inquiries
                     </h2>
@@ -134,7 +134,7 @@
                     </a>
                     <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#manualPollModalCustomerView">
                         <i class="fas fa-sync-alt me-1"></i> Sync Emails
-                    </button>
+                </button>
                 </div>
             </div>
 
@@ -367,25 +367,25 @@
                 </div>
             </div>
         {% endif %}
+        </div>
     </div>
-</div>
 
-<!-- Manual Poll Modal -->
-<div class="modal fade" id="manualPollModalCustomerView" tabindex="-1" aria-labelledby="manualPollModalLabelCustomerView" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="manualPollModalLabelCustomerView">Manual Email Poll</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p>Are you sure you want to manually poll for new emails?</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <form action="{{ url_for('main.manual_email_poll_route') }}" method="POST">
-                    <button type="submit" class="btn btn-primary">Poll Now</button>
-                </form>
+    <!-- Manual Poll Modal -->
+    <div class="modal fade" id="manualPollModalCustomerView" tabindex="-1" aria-labelledby="manualPollModalLabelCustomerView" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="manualPollModalLabelCustomerView">Manual Email Poll</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to manually poll for new emails?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <form action="{{ url_for('main.manual_email_poll_route') }}" method="POST">
+                        <button type="submit" class="btn btn-primary">Poll Now</button>
+                    </form>
             </div>
         </div>
     </div>
