@@ -12,6 +12,40 @@ from datetime import datetime, timezone # Import timezone for naive datetime com
 # Removed direct import of poll_new_emails from background_tasks
 # from app.background_tasks import poll_new_emails
 
+def format_display_name(email_address):
+    """Format email addresses for display names, especially WhatsApp ones"""
+    if not email_address:
+        return "Unknown Customer"
+    
+    # Check if it's a WhatsApp email
+    if '@internal.placeholder' in email_address and 'whatsapp_' in email_address:
+        try:
+            # Extract phone number between 'whatsapp_' and '@c.us'
+            phone_part = email_address.replace('whatsapp_', '').split('@')[0]
+            if len(phone_part) >= 10:  # Valid phone number length
+                # Format as (XXX) XXX-XXXX for US numbers or +XX XXX XXX XXXX for international
+                if len(phone_part) == 11 and phone_part.startswith('1'):
+                    # US number with country code
+                    formatted = f"({phone_part[1:4]}) {phone_part[4:7]}-{phone_part[7:]}"
+                    return f"WhatsApp: {formatted}"
+                elif len(phone_part) == 10:
+                    # US number without country code
+                    formatted = f"({phone_part[:3]}) {phone_part[3:6]}-{phone_part[6:]}"
+                    return f"WhatsApp: {formatted}"
+                else:
+                    # International number
+                    return f"WhatsApp: +{phone_part}"
+            else:
+                return "WhatsApp Contact"
+        except Exception:
+            return "WhatsApp Contact"
+    
+    # Regular email - truncate if too long
+    if len(email_address) > 25:
+        return f"{email_address[:22]}..."
+    else:
+        return email_address
+
 # Create a Blueprint for the main application routes
 # Remove explicit static_folder here to rely on app-level static handling
 main_bp = Blueprint('main', __name__,
@@ -136,12 +170,12 @@ def dashboard_customer_view():
                 if first_name.strip() or last_name.strip():
                     display_name = f"{first_name} {last_name}".strip()
                 elif inquiry.primary_email_address:
-                    display_name = inquiry.primary_email_address
+                    display_name = format_display_name(inquiry.primary_email_address)
                 
                 if isinstance(data.data.get('travelers'), list):
                     num_travelers = len(data.data.get('travelers'))
             elif inquiry.primary_email_address: # Fallback if no extracted_data but inquiry exists
-                display_name = inquiry.primary_email_address
+                display_name = format_display_name(inquiry.primary_email_address)
 
 
             customer_view_items.append({
