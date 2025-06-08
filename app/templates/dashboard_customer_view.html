@@ -138,38 +138,70 @@
                 </div>
             </div>
 
-            <!-- Quick Stats Row -->
-            <div class="quick-stats p-3 mb-4">
+            <!-- Enhanced Business Metrics Row -->
+            <div class="quick-stats p-4 mb-4">
                 <div class="row">
-                    <div class="col-md-3 col-6 text-center">
+                    <div class="col-lg-3 col-md-6 col-12 text-center mb-3 mb-lg-0">
                         <div class="d-flex flex-column">
-                            <span class="h4 text-white mb-0" id="total-count">{{ customer_items|length }}</span>
+                            <span class="h3 text-white mb-0" id="total-count">{{ customer_items|length }}</span>
                             <span class="text-secondary">Total Inquiries</span>
+                            <small class="text-success mt-1">
+                                <i class="fas fa-arrow-up me-1"></i>Active Pipeline
+                            </small>
                         </div>
                     </div>
-                    <div class="col-md-3 col-6 text-center">
+                    <div class="col-lg-3 col-md-6 col-12 text-center mb-3 mb-lg-0">
                         <div class="d-flex flex-column">
-                            <span class="h4 text-success mb-0" id="complete-count">
-                                {{ customer_items|selectattr('inquiry.status', 'in', ['Complete', 'Manually Corrected'])|list|length }}
+                            {% set total_cost = customer_items|selectattr('data')|map(attribute='data.data.trip_cost')|select('string')|map('float', 0)|sum %}
+                            <span class="h3 text-success mb-0">
+                                ${{ "{:,.0f}".format(total_cost) if total_cost > 0 else "0" }}
                             </span>
-                            <span class="text-secondary">Completed</span>
+                            <span class="text-secondary">Pipeline Value</span>
+                            {% set avg_cost = (total_cost / customer_items|length) if customer_items|length > 0 else 0 %}
+                            <small class="text-info mt-1">
+                                Avg: ${{ "{:,.0f}".format(avg_cost) if avg_cost > 0 else "0" }}
+                            </small>
                         </div>
                     </div>
-                    <div class="col-md-3 col-6 text-center">
+                    <div class="col-lg-3 col-md-6 col-12 text-center mb-3 mb-lg-0">
                         <div class="d-flex flex-column">
-                            <span class="h4 text-warning mb-0" id="pending-count">
-                                {{ customer_items|selectattr('inquiry.status', 'in', ['new', 'Incomplete', 'new_whatsapp'])|list|length }}
-                            </span>
-                            <span class="text-secondary">Pending</span>
+                            {% set complete_count = customer_items|selectattr('inquiry.status', 'in', ['Complete', 'Manually Corrected'])|list|length %}
+                            <span class="h3 text-primary mb-0" id="complete-count">{{ complete_count }}</span>
+                            <span class="text-secondary">Ready to Quote</span>
+                            {% set completion_rate = ((complete_count / customer_items|length) * 100) if customer_items|length > 0 else 0 %}
+                            <small class="text-primary mt-1">
+                                {{ "%.0f"|format(completion_rate) }}% completion rate
+                            </small>
                         </div>
                     </div>
-                    <div class="col-md-3 col-6 text-center">
+                    <div class="col-lg-3 col-md-6 col-12 text-center">
                         <div class="d-flex flex-column">
-                            <span class="h4 text-info mb-0">
-                                {% set total_cost = customer_items|selectattr('data')|map(attribute='data.data.trip_cost')|select('string')|map('float', 0)|sum %}
-                                ${{ "%.0f"|format(total_cost) if total_cost > 0 else "0" }}
-                            </span>
-                            <span class="text-secondary">Total Value</span>
+                            {% set high_value_count = customer_items|selectattr('data')|selectattr('data.data.trip_cost')|select('string')|map('float', 0)|select('gt', 5000)|list|length %}
+                            <span class="h3 text-warning mb-0">{{ high_value_count }}</span>
+                            <span class="text-secondary">High-Value Trips</span>
+                            <small class="text-warning mt-1">
+                                <i class="fas fa-star me-1"></i>$5,000+ opportunities
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Quick Action Buttons Row -->
+                <div class="row mt-4 pt-3 border-top border-secondary border-opacity-25">
+                    <div class="col-12 text-center">
+                        <div class="d-flex flex-wrap justify-content-center gap-2">
+                            <button class="btn btn-outline-success btn-sm" onclick="exportHighValueInquiries()">
+                                <i class="fas fa-download me-1"></i> Export High-Value
+                            </button>
+                            <button class="btn btn-outline-info btn-sm" onclick="exportReadyToQuote()">
+                                <i class="fas fa-file-export me-1"></i> Ready to Quote
+                            </button>
+                            <button class="btn btn-outline-warning btn-sm" onclick="showPendingInquiries()">
+                                <i class="fas fa-clock me-1"></i> Need Attention
+                            </button>
+                            <a href="#" class="btn btn-outline-light btn-sm" onclick="generateBusinessReport()">
+                                <i class="fas fa-chart-line me-1"></i> Business Report
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -317,11 +349,11 @@
 
                         <div class="info-item">
                             <div class="d-flex align-items-center mb-1">
-                                <i class="fas fa-envelope text-secondary me-2"></i>
+                                <i class="fas fa-{{ 'mobile-alt' if 'whatsapp_' in item.inquiry.primary_email_address else 'envelope' }} text-secondary me-2"></i>
                                 <span class="text-secondary small">Contact</span>
                             </div>
                             <div class="text-white fw-medium small">
-                                {{ item.inquiry.primary_email_address }}
+                                {{ item.inquiry.primary_email_address|format_contact }}
                             </div>
                         </div>
                     </div>
@@ -464,5 +496,26 @@ document.addEventListener('DOMContentLoaded', function() {
         return new bootstrap.Tooltip(tooltipTriggerEl);
     });
 });
+
+// Export and Action Functions
+function exportHighValueInquiries() {
+    window.location.href = '/export/high-value';
+}
+
+function exportReadyToQuote() {
+    window.location.href = '/export/ready-to-quote';
+}
+
+function showPendingInquiries() {
+    // Filter to show only pending inquiries
+    document.querySelector('[data-filter="pending"]').click();
+    // Scroll to top of results
+    document.getElementById('inquiriesContainer').scrollIntoView({ behavior: 'smooth' });
+}
+
+function generateBusinessReport() {
+    // Open business report in new tab
+    window.open('/reports/business-summary', '_blank');
+}
 </script>
 {% endblock %} 

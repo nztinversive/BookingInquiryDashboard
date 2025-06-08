@@ -160,6 +160,44 @@ def create_app():
 
         app.jinja_env.filters['humanize_datetime'] = humanize_datetime_filter
         logging.info("Registered custom Jinja filter: humanize_datetime")
+        
+        def format_contact_filter(email_address):
+            """Format email addresses for display, especially WhatsApp ones"""
+            if not email_address:
+                return "No contact"
+            
+            # Check if it's a WhatsApp email
+            if '@internal.placeholder' in email_address and 'whatsapp_' in email_address:
+                # Extract the phone number from whatsapp_PHONENUMBER@c.us@internal.placeholder
+                try:
+                    # Extract phone number between 'whatsapp_' and '@c.us'
+                    phone_part = email_address.replace('whatsapp_', '').split('@')[0]
+                    if len(phone_part) >= 10:  # Valid phone number length
+                        # Format as (XXX) XXX-XXXX for US numbers or +XX XXX XXX XXXX for international
+                        if len(phone_part) == 11 and phone_part.startswith('1'):
+                            # US number with country code
+                            formatted = f"({phone_part[1:4]}) {phone_part[4:7]}-{phone_part[7:]}"
+                            return f"📱 WhatsApp: {formatted}"
+                        elif len(phone_part) == 10:
+                            # US number without country code
+                            formatted = f"({phone_part[:3]}) {phone_part[3:6]}-{phone_part[6:]}"
+                            return f"📱 WhatsApp: {formatted}"
+                        else:
+                            # International number
+                            return f"📱 WhatsApp: +{phone_part}"
+                    else:
+                        return "📱 WhatsApp Contact"
+                except Exception:
+                    return "📱 WhatsApp Contact"
+            
+            # Regular email - truncate if too long
+            if len(email_address) > 25:
+                return f"✉️ {email_address[:22]}..."
+            else:
+                return f"✉️ {email_address}"
+
+        app.jinja_env.filters['format_contact'] = format_contact_filter
+        logging.info("Registered custom Jinja filter: format_contact")
 
         # --- Configure and Start APScheduler ---
         ms_graph_config_ok = all([

@@ -185,7 +185,7 @@
     <div class="inquiry-header p-4 mb-4">
         <div class="d-flex justify-content-between align-items-start mb-3">
             <div class="d-flex align-items-center">
-                {% set customer_name = inquiry.extracted_data.data.get('first_name', '') + ' ' + inquiry.extracted_data.data.get('last_name', '') if inquiry.extracted_data else inquiry.primary_email_address %}
+                {% set customer_name = ((inquiry.extracted_data.data.get('first_name') or '') + ' ' + (inquiry.extracted_data.data.get('last_name') or '')).strip() if inquiry.extracted_data else inquiry.primary_email_address %}
                 <div class="customer-avatar-large">
                     {{ customer_name[:2]|upper }}
                 </div>
@@ -201,7 +201,7 @@
                         <span class="text-secondary">Inquiry #{{ inquiry.id }}</span>
                     </div>
                     <p class="text-secondary mb-0">
-                        <i class="fas fa-envelope me-1"></i> {{ inquiry.primary_email_address }}
+                        <i class="fas fa-{{ 'mobile-alt' if 'whatsapp_' in inquiry.primary_email_address else 'envelope' }} me-1"></i> {{ inquiry.primary_email_address|format_contact }}
                     </p>
                 </div>
             </div>
@@ -285,7 +285,9 @@
                             <i class="fas fa-user me-1"></i> Customer Name
                         </div>
                         <div class="detail-item-value">
-                            {{ data.get('first_name', 'N/A') }} {{ data.get('last_name', 'N/A') }}
+                            {% set first_name = data.get('first_name') or 'N/A' %}
+                            {% set last_name = data.get('last_name') or 'N/A' %}
+                            {{ first_name }} {{ last_name }}
                         </div>
                     </div>
 

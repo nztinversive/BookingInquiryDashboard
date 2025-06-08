@@ -316,8 +316,9 @@ Your task is to accurately identify and extract the following fields and return 
 
 IMPORTANT DATE HANDLING RULES:
 - All dates must be standardized to YYYY-MM-DD format
-- For travel dates (travel_start_date, travel_end_date), if no year is specified, assume the next occurrence of that date (2025 or 2026 if needed)
-- Travel dates should NEVER be in the past unless explicitly specified
+- For travel dates (travel_start_date, travel_end_date), if no year is specified, assume 2025 first, then 2026 if the 2025 date would be in the past
+- Travel dates should NEVER be in the past (today is 2025) unless explicitly specified with a past year
+- If you see dates like "March 2023" these are likely meant to be "March 2025" - correct the year to 2025 or later
 - For birth dates, use the year if provided, otherwise return null
 - Deposit dates should be reasonable relative to travel dates
 
@@ -483,6 +484,7 @@ def extract_travel_data(email_body_html):
     # 6. Post-process travel dates to ensure they're not in the past
     from datetime import datetime, timedelta
     current_date = datetime.now().date()
+    current_year = current_date.year  # Should be 2025
     
     for date_field in ['travel_start_date', 'travel_end_date']:
         date_str = final_data.get(date_field)
@@ -500,9 +502,21 @@ def extract_travel_data(email_body_html):
                         continue
                 
                 if parsed_date and parsed_date < current_date:
-                    # Date is in the past, adjust to next year
-                    next_year_date = parsed_date.replace(year=current_date.year + 1)
-                    final_data[date_field] = next_year_date.strftime("%Y-%m-%d")
+                    # Date is in the past, adjust to current year or next year
+                    if parsed_date.year < current_year:
+                        # Old year like 2023, move to 2025 first
+                        try_current_year = parsed_date.replace(year=current_year)
+                        if try_current_year >= current_date:
+                            # Date in current year is still in future, use it
+                            adjusted_date = try_current_year
+                        else:
+                            # Date in current year is also past, use next year
+                            adjusted_date = parsed_date.replace(year=current_year + 1)
+                    else:
+                        # Date is in current year but past, move to next year
+                        adjusted_date = parsed_date.replace(year=current_year + 1)
+                    
+                    final_data[date_field] = adjusted_date.strftime("%Y-%m-%d")
                     logging.info(f"Adjusted {date_field} from past date {date_str} to future date {final_data[date_field]}")
                 elif parsed_date:
                     # Ensure consistent formatting

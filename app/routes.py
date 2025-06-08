@@ -131,8 +131,10 @@ def dashboard_customer_view():
             num_travelers = 0
 
             if data:
-                if data.data.get('first_name') and data.data.get('last_name'):
-                    display_name = f"{data.data.get('first_name')} {data.data.get('last_name')}"
+                first_name = data.data.get('first_name') or ''
+                last_name = data.data.get('last_name') or ''
+                if first_name.strip() or last_name.strip():
+                    display_name = f"{first_name} {last_name}".strip()
                 elif inquiry.primary_email_address:
                     display_name = inquiry.primary_email_address
                 
@@ -205,6 +207,228 @@ def export_csv():
     # return redirect(url_for('.dashboard'))
     # Or just abort with a 404 for now:
     abort(404, description="CSV Export Not Implemented Yet")
+
+# === NEW CLIENT-READY EXPORT ROUTES ===
+
+@main_bp.route('/export/high-value')
+@login_required
+def export_high_value_inquiries():
+    """Export high-value inquiries (>$5000) to CSV format."""
+    try:
+        import csv
+        from io import StringIO
+        
+        # Query high-value inquiries
+        inquiries = Inquiry.query.options(joinedload(Inquiry.extracted_data)).all()
+        
+        # Filter for high-value trips
+        high_value_inquiries = []
+        for inquiry in inquiries:
+            if inquiry.extracted_data and inquiry.extracted_data.data:
+                trip_cost = inquiry.extracted_data.data.get('trip_cost', '0')
+                try:
+                    cost_value = float(trip_cost) if trip_cost and trip_cost != 'N/A' else 0
+                    if cost_value > 5000:
+                        high_value_inquiries.append(inquiry)
+                except (ValueError, TypeError):
+                    continue
+        
+        # Create CSV output
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'Inquiry ID', 'Customer Name', 'Email', 'Trip Cost', 'Destination',
+            'Travel Start Date', 'Travel End Date', 'Travelers', 'Status', 'Created Date'
+        ])
+        
+        # Write data rows
+        for inquiry in high_value_inquiries:
+            data = inquiry.extracted_data.data if inquiry.extracted_data else {}
+            
+            first_name = data.get('first_name') or ''
+            last_name = data.get('last_name') or ''
+            customer_name = f"{first_name} {last_name}".strip()
+            if not customer_name:
+                customer_name = inquiry.primary_email_address
+            
+            trip_cost = data.get('trip_cost', 'N/A')
+            destination = data.get('trip_destination', 'N/A')
+            start_date = data.get('travel_start_date', 'N/A')
+            end_date = data.get('travel_end_date', 'N/A')
+            travelers = len(data.get('travelers', [])) if isinstance(data.get('travelers'), list) else 'N/A'
+            
+            writer.writerow([
+                inquiry.id,
+                customer_name,
+                inquiry.primary_email_address,
+                trip_cost,
+                destination,
+                start_date,
+                end_date,
+                travelers,
+                inquiry.status,
+                inquiry.created_at.strftime('%Y-%m-%d') if inquiry.created_at else 'N/A'
+            ])
+        
+        output.seek(0)
+        
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=high_value_inquiries.csv'}
+        )
+        
+    except Exception as e:
+        current_app.logger.error(f"Error exporting high-value inquiries: {e}", exc_info=True)
+        flash("Error generating export. Please try again.", "danger")
+        return redirect(url_for('.dashboard_customer_view'))
+
+@main_bp.route('/export/ready-to-quote')
+@login_required
+def export_ready_to_quote():
+    """Export complete inquiries ready for quoting to CSV format."""
+    try:
+        import csv
+        from io import StringIO
+        
+        # Query completed inquiries
+        inquiries = Inquiry.query.options(joinedload(Inquiry.extracted_data)).filter(
+            Inquiry.status.in_(['Complete', 'Manually Corrected'])
+        ).all()
+        
+        # Create CSV output
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'Inquiry ID', 'Customer Name', 'Email', 'Phone', 'Trip Cost', 'Destination',
+            'Travel Start Date', 'Travel End Date', 'Travelers', 'Home Address', 
+            'Status', 'Data Completeness', 'Created Date'
+        ])
+        
+        # Write data rows
+        for inquiry in inquiries:
+            data = inquiry.extracted_data.data if inquiry.extracted_data else {}
+            
+            first_name = data.get('first_name') or ''
+            last_name = data.get('last_name') or ''
+            customer_name = f"{first_name} {last_name}".strip()
+            if not customer_name:
+                customer_name = inquiry.primary_email_address
+            
+            # Calculate data completeness
+            required_fields = ['first_name', 'last_name', 'travel_start_date', 'travel_end_date', 'trip_destination']
+            filled_fields = sum(1 for field in required_fields if data.get(field) and data.get(field) != 'N/A')
+            completeness = f"{(filled_fields / len(required_fields) * 100):.0f}%"
+            
+            trip_cost = data.get('trip_cost', 'N/A')
+            destination = data.get('trip_destination', 'N/A')
+            start_date = data.get('travel_start_date', 'N/A')
+            end_date = data.get('travel_end_date', 'N/A')
+            travelers = len(data.get('travelers', [])) if isinstance(data.get('travelers'), list) else 'N/A'
+            phone = data.get('phone_number', 'N/A')
+            home_address = data.get('home_address', 'N/A')
+            
+            writer.writerow([
+                inquiry.id,
+                customer_name,
+                inquiry.primary_email_address,
+                phone,
+                trip_cost,
+                destination,
+                start_date,
+                end_date,
+                travelers,
+                home_address,
+                inquiry.status,
+                completeness,
+                inquiry.created_at.strftime('%Y-%m-%d') if inquiry.created_at else 'N/A'
+            ])
+        
+        output.seek(0)
+        
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=ready_to_quote_inquiries.csv'}
+        )
+        
+    except Exception as e:
+        current_app.logger.error(f"Error exporting ready-to-quote inquiries: {e}", exc_info=True)
+        flash("Error generating export. Please try again.", "danger")
+        return redirect(url_for('.dashboard_customer_view'))
+
+@main_bp.route('/reports/business-summary')
+@login_required
+def business_summary_report():
+    """Generate a comprehensive business summary report."""
+    try:
+        # Fetch all inquiries with extracted data
+        inquiries = Inquiry.query.options(joinedload(Inquiry.extracted_data)).all()
+        
+        # Calculate business metrics
+        total_inquiries = len(inquiries)
+        total_pipeline_value = 0
+        high_value_count = 0
+        complete_count = 0
+        pending_count = 0
+        error_count = 0
+        destinations = {}
+        
+        for inquiry in inquiries:
+            # Status counts
+            if inquiry.status in ['Complete', 'Manually Corrected']:
+                complete_count += 1
+            elif inquiry.status in ['new', 'Incomplete', 'new_whatsapp']:
+                pending_count += 1
+            elif inquiry.status in ['Error', 'Processing Failed']:
+                error_count += 1
+            
+            # Pipeline value and destinations
+            if inquiry.extracted_data and inquiry.extracted_data.data:
+                data = inquiry.extracted_data.data
+                trip_cost = data.get('trip_cost', '0')
+                try:
+                    cost_value = float(trip_cost) if trip_cost and trip_cost != 'N/A' else 0
+                    total_pipeline_value += cost_value
+                    if cost_value > 5000:
+                        high_value_count += 1
+                except (ValueError, TypeError):
+                    pass
+                
+                # Track destinations
+                destination = data.get('trip_destination', 'Unknown')
+                if destination and destination != 'N/A':
+                    destinations[destination] = destinations.get(destination, 0) + 1
+        
+        # Calculate averages and rates
+        avg_trip_value = total_pipeline_value / total_inquiries if total_inquiries > 0 else 0
+        completion_rate = (complete_count / total_inquiries * 100) if total_inquiries > 0 else 0
+        
+        # Top destinations
+        top_destinations = sorted(destinations.items(), key=lambda x: x[1], reverse=True)[:5]
+        
+        # Render the report template
+        return render_template('business_summary_report.html',
+                               user=current_user,
+                               total_inquiries=total_inquiries,
+                               total_pipeline_value=total_pipeline_value,
+                               avg_trip_value=avg_trip_value,
+                               high_value_count=high_value_count,
+                               complete_count=complete_count,
+                               pending_count=pending_count,
+                               error_count=error_count,
+                               completion_rate=completion_rate,
+                               top_destinations=top_destinations,
+                               report_date=datetime.now().strftime('%B %d, %Y'))
+        
+    except Exception as e:
+        current_app.logger.error(f"Error generating business summary report: {e}", exc_info=True)
+        flash("Error generating business report. Please try again.", "danger")
+        return redirect(url_for('.dashboard_customer_view'))
 
 # --- New Route for Email Details ---
 @main_bp.route('/email/<string:graph_id>')

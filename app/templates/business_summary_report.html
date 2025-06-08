@@ -1,0 +1,324 @@
+{% extends "layout.html" %}
+
+{% block title %}Business Summary Report - {{ super() }}{% endblock %}
+
+{% block head %}
+<style>
+/* Business Report Styles */
+.report-header {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+    border-radius: 1rem;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    margin-bottom: 2rem;
+}
+
+.metric-card {
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    transition: all 0.2s ease;
+    height: 100%;
+}
+
+.metric-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.metric-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+}
+
+.metric-label {
+    color: #94a3b8;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.chart-container {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    padding: 2rem;
+}
+
+.destination-item {
+    display: flex;
+    justify-content: between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.destination-item:last-child {
+    border-bottom: none;
+}
+
+.progress-bar-custom {
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+    flex-grow: 1;
+    margin: 0 1rem;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(45deg, #10b981, #34d399);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+@media print {
+    .no-print {
+        display: none !important;
+    }
+    
+    .metric-card, .chart-container, .report-header {
+        border: 1px solid #ccc !important;
+        background: white !important;
+        color: black !important;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Report Header -->
+    <div class="report-header p-4 mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="text-white mb-2">
+                    <i class="fas fa-chart-line me-3"></i>Business Summary Report
+                </h1>
+                <p class="text-secondary mb-0">Generated on {{ report_date }}</p>
+            </div>
+            <div class="no-print">
+                <button onclick="window.print()" class="btn btn-outline-light me-2">
+                    <i class="fas fa-print me-1"></i> Print Report
+                </button>
+                <a href="{{ url_for('main.dashboard_customer_view') }}" class="btn btn-primary">
+                    <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Key Metrics Row -->
+    <div class="row mb-4">
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="metric-card p-4 text-center">
+                <div class="metric-value text-white mb-2">{{ total_inquiries }}</div>
+                <div class="metric-label">Total Inquiries</div>
+                <small class="text-info">
+                    <i class="fas fa-users me-1"></i>Active Pipeline
+                </small>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="metric-card p-4 text-center">
+                <div class="metric-value text-success mb-2">${{ "{:,.0f}".format(total_pipeline_value) }}</div>
+                <div class="metric-label">Pipeline Value</div>
+                <small class="text-success">
+                    Avg: ${{ "{:,.0f}".format(avg_trip_value) }}
+                </small>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="metric-card p-4 text-center">
+                <div class="metric-value text-primary mb-2">{{ "%.0f"|format(completion_rate) }}%</div>
+                <div class="metric-label">Completion Rate</div>
+                <small class="text-primary">
+                    {{ complete_count }} of {{ total_inquiries }} ready
+                </small>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="metric-card p-4 text-center">
+                <div class="metric-value text-warning mb-2">{{ high_value_count }}</div>
+                <div class="metric-label">High-Value Trips</div>
+                <small class="text-warning">
+                    <i class="fas fa-star me-1"></i>$5,000+ opportunities
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Breakdown and Top Destinations -->
+    <div class="row mb-4">
+        <!-- Status Breakdown -->
+        <div class="col-lg-6 mb-4">
+            <div class="chart-container">
+                <h4 class="text-white mb-4">
+                    <i class="fas fa-chart-pie me-2"></i>Inquiry Status Breakdown
+                </h4>
+                
+                <div class="row">
+                    <div class="col-6 text-center mb-3">
+                        <div class="h2 text-success mb-1">{{ complete_count }}</div>
+                        <div class="text-secondary">Ready to Quote</div>
+                        <div class="progress-bar-custom mt-2">
+                            <div class="progress-fill bg-success" style="width: {{ (complete_count / total_inquiries * 100) if total_inquiries > 0 else 0 }}%"></div>
+                        </div>
+                    </div>
+                    <div class="col-6 text-center mb-3">
+                        <div class="h2 text-warning mb-1">{{ pending_count }}</div>
+                        <div class="text-secondary">Pending Review</div>
+                        <div class="progress-bar-custom mt-2">
+                            <div class="progress-fill bg-warning" style="width: {{ (pending_count / total_inquiries * 100) if total_inquiries > 0 else 0 }}%"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if error_count > 0 %}
+                <div class="row">
+                    <div class="col-12 text-center">
+                        <div class="h3 text-danger mb-1">{{ error_count }}</div>
+                        <div class="text-secondary">Need Attention</div>
+                        <div class="progress-bar-custom mt-2">
+                            <div class="progress-fill bg-danger" style="width: {{ (error_count / total_inquiries * 100) if total_inquiries > 0 else 0 }}%"></div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Top Destinations -->
+        <div class="col-lg-6 mb-4">
+            <div class="chart-container">
+                <h4 class="text-white mb-4">
+                    <i class="fas fa-map-marker-alt me-2"></i>Top Destinations
+                </h4>
+                
+                {% if top_destinations %}
+                    {% for destination, count in top_destinations %}
+                    <div class="destination-item">
+                        <div class="text-white fw-medium" style="min-width: 150px;">
+                            {{ destination|title }}
+                        </div>
+                        <div class="progress-bar-custom">
+                            {% set max_count = top_destinations[0][1] if top_destinations else 1 %}
+                            <div class="progress-fill" style="width: {{ (count / max_count * 100) }}%"></div>
+                        </div>
+                        <div class="text-secondary fw-bold" style="min-width: 40px; text-align: right;">
+                            {{ count }}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-center text-secondary py-4">
+                        <i class="fas fa-info-circle me-2"></i>No destination data available yet
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Business Insights -->
+    <div class="row">
+        <div class="col-12">
+            <div class="chart-container">
+                <h4 class="text-white mb-4">
+                    <i class="fas fa-lightbulb me-2"></i>Key Business Insights
+                </h4>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-info mb-2">Revenue Opportunities</h6>
+                            <ul class="list-unstyled text-secondary">
+                                {% if high_value_count > 0 %}
+                                <li class="mb-2">
+                                    <i class="fas fa-star text-warning me-2"></i>
+                                    {{ high_value_count }} high-value trips worth prioritizing
+                                </li>
+                                {% endif %}
+                                {% if completion_rate < 80 %}
+                                <li class="mb-2">
+                                    <i class="fas fa-chart-line text-info me-2"></i>
+                                    {{ pending_count }} inquiries need data completion for quoting
+                                </li>
+                                {% endif %}
+                                <li class="mb-2">
+                                    <i class="fas fa-dollar-sign text-success me-2"></i>
+                                    Average trip value: ${{ "{:,.0f}".format(avg_trip_value) }}
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-info mb-2">Operational Recommendations</h6>
+                            <ul class="list-unstyled text-secondary">
+                                {% if completion_rate < 50 %}
+                                <li class="mb-2">
+                                    <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                                    Focus on improving data completion rates
+                                </li>
+                                {% endif %}
+                                {% if top_destinations %}
+                                <li class="mb-2">
+                                    <i class="fas fa-map-marked-alt text-primary me-2"></i>
+                                    {{ top_destinations[0][0]|title }} is the top destination ({{ top_destinations[0][1] }} inquiries)
+                                </li>
+                                {% endif %}
+                                {% if error_count > 0 %}
+                                <li class="mb-2">
+                                    <i class="fas fa-tools text-danger me-2"></i>
+                                    {{ error_count }} inquiries need technical attention
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Items Footer -->
+    <div class="row mt-4 no-print">
+        <div class="col-12">
+            <div class="card bg-dark border-secondary">
+                <div class="card-body">
+                    <h5 class="text-white mb-3">
+                        <i class="fas fa-tasks me-2"></i>Recommended Next Actions
+                    </h5>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <a href="{{ url_for('main.export_high_value_inquiries') }}" class="btn btn-outline-success w-100 mb-2">
+                                <i class="fas fa-download me-1"></i> Export High-Value Inquiries
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="{{ url_for('main.export_ready_to_quote') }}" class="btn btn-outline-info w-100 mb-2">
+                                <i class="fas fa-file-export me-1"></i> Export Ready to Quote
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="{{ url_for('main.dashboard_customer_view') }}" class="btn btn-outline-warning w-100 mb-2">
+                                <i class="fas fa-eye me-1"></i> Review Pending Inquiries
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add any interactive features for the report here
+    console.log('Business Summary Report loaded');
+});
+</script>
+{% endblock %} 
