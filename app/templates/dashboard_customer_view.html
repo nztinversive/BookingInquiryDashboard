@@ -361,9 +361,35 @@
                     <!-- Progress Indicator -->
                     {% set data_completeness = 0 %}
                     {% if item.data %}
-                        {% set required_fields = ['first_name', 'last_name', 'travel_start_date', 'travel_end_date', 'trip_destination'] %}
-                        {% set filled_fields = required_fields|select('in', item.data.data.keys())|select('ne', 'N/A')|list|length %}
-                        {% set data_completeness = (filled_fields / required_fields|length * 100)|round %}
+                        {% set filled_count = 0 %}
+                        {% set total_required = 5 %}
+                        
+                        {# Check first_name #}
+                        {% if item.data.data.get('first_name') and item.data.data.get('first_name') != 'N/A' and item.data.data.get('first_name')|length > 0 %}
+                            {% set filled_count = filled_count + 1 %}
+                        {% endif %}
+                        
+                        {# Check last_name #}
+                        {% if item.data.data.get('last_name') and item.data.data.get('last_name') != 'N/A' and item.data.data.get('last_name')|length > 0 %}
+                            {% set filled_count = filled_count + 1 %}
+                        {% endif %}
+                        
+                        {# Check travel_start_date #}
+                        {% if item.data.data.get('travel_start_date') and item.data.data.get('travel_start_date') != 'N/A' and item.data.data.get('travel_start_date')|length > 0 %}
+                            {% set filled_count = filled_count + 1 %}
+                        {% endif %}
+                        
+                        {# Check travel_end_date #}
+                        {% if item.data.data.get('travel_end_date') and item.data.data.get('travel_end_date') != 'N/A' and item.data.data.get('travel_end_date')|length > 0 %}
+                            {% set filled_count = filled_count + 1 %}
+                        {% endif %}
+                        
+                        {# Check trip_destination #}
+                        {% if item.data.data.get('trip_destination') and item.data.data.get('trip_destination') != 'N/A' and item.data.data.get('trip_destination')|length > 0 and item.data.data.get('trip_destination')|lower != 'none' and item.data.data.get('trip_destination')|lower != 'not specified' %}
+                            {% set filled_count = filled_count + 1 %}
+                        {% endif %}
+                        
+                        {% set data_completeness = (filled_count / total_required * 100)|round %}
                     {% endif %}
                     
                     <div class="d-flex justify-content-between align-items-center mt-3">

@@ -185,13 +185,14 @@
     <div class="inquiry-header p-4 mb-4">
         <div class="d-flex justify-content-between align-items-start mb-3">
             <div class="d-flex align-items-center">
-                {% set customer_name = ((inquiry.extracted_data.data.get('first_name') or '') + ' ' + (inquiry.extracted_data.data.get('last_name') or '')).strip() if inquiry.extracted_data else inquiry.primary_email_address %}
+                {% set customer_name = ((inquiry.extracted_data.data.get('first_name') or '') + ' ' + (inquiry.extracted_data.data.get('last_name') or '')).strip() if inquiry.extracted_data else '' %}
+                {% set display_title = customer_name if customer_name else inquiry.primary_email_address|format_contact %}
                 <div class="customer-avatar-large">
-                    {{ customer_name[:2]|upper }}
+                    {{ display_title[:2]|upper }}
                 </div>
                 <div>
                     <h1 class="text-white mb-1">
-                        {{ customer_name.strip() if customer_name.strip() else inquiry.primary_email_address }}
+                        {{ display_title }}
                     </h1>
                     <div class="d-flex align-items-center gap-3 mb-2">
                         {% set status_class = 'complete' if inquiry.status in ['Complete', 'Manually Corrected'] else 'pending' if inquiry.status in ['new', 'Incomplete', 'new_whatsapp'] else 'error' %}
@@ -451,23 +452,65 @@
             {% if inquiry.extracted_data %}
             <div class="detail-section text-center">
                 <h5 class="text-white mb-3">Data Completeness</h5>
-                {% set required_fields = ['first_name', 'last_name', 'travel_start_date', 'travel_end_date', 'trip_destination'] %}
-                {% set filled_fields = required_fields|select('in', inquiry.extracted_data.data.keys())|select('ne', 'N/A')|list|length %}
-                {% set completeness = (filled_fields / required_fields|length * 100)|round %}
+                {% set filled_count = 0 %}
+                {% set total_required = 5 %}
+                
+                {# Check first_name #}
+                {% if inquiry.extracted_data.data.get('first_name') and inquiry.extracted_data.data.get('first_name') != 'N/A' and inquiry.extracted_data.data.get('first_name')|length > 0 %}
+                    {% set filled_count = filled_count + 1 %}
+                {% endif %}
+                
+                {# Check last_name #}
+                {% if inquiry.extracted_data.data.get('last_name') and inquiry.extracted_data.data.get('last_name') != 'N/A' and inquiry.extracted_data.data.get('last_name')|length > 0 %}
+                    {% set filled_count = filled_count + 1 %}
+                {% endif %}
+                
+                {# Check travel_start_date #}
+                {% if inquiry.extracted_data.data.get('travel_start_date') and inquiry.extracted_data.data.get('travel_start_date') != 'N/A' and inquiry.extracted_data.data.get('travel_start_date')|length > 0 %}
+                    {% set filled_count = filled_count + 1 %}
+                {% endif %}
+                
+                {# Check travel_end_date #}
+                {% if inquiry.extracted_data.data.get('travel_end_date') and inquiry.extracted_data.data.get('travel_end_date') != 'N/A' and inquiry.extracted_data.data.get('travel_end_date')|length > 0 %}
+                    {% set filled_count = filled_count + 1 %}
+                {% endif %}
+                
+                {# Check trip_destination #}
+                {% if inquiry.extracted_data.data.get('trip_destination') and inquiry.extracted_data.data.get('trip_destination') != 'N/A' and inquiry.extracted_data.data.get('trip_destination')|length > 0 and inquiry.extracted_data.data.get('trip_destination')|lower != 'none' and inquiry.extracted_data.data.get('trip_destination')|lower != 'not specified' %}
+                    {% set filled_count = filled_count + 1 %}
+                {% endif %}
+                
+                {% set completeness = (filled_count / total_required * 100)|round %}
                 
                 <div class="progress-ring mx-auto mb-3" style="--progress: {{ completeness }}%">
                     <div class="progress-text">{{ completeness }}%</div>
                 </div>
                 
                 <p class="text-secondary mb-0">
-                    {{ filled_fields }}/{{ required_fields|length }} required fields completed
+                    {{ filled_count }}/{{ total_required }} required fields completed
                 </p>
                 
                 {% if completeness < 100 %}
                 <div class="mt-2">
                     <small class="text-warning">
                         <i class="fas fa-exclamation-triangle me-1"></i>
-                        Missing: {{ required_fields|reject('in', inquiry.extracted_data.data.keys())|join(', ')|title }}
+                        {% set missing_fields = [] %}
+                        {% if not (inquiry.extracted_data.data.get('first_name') and inquiry.extracted_data.data.get('first_name') != 'N/A' and inquiry.extracted_data.data.get('first_name')|length > 0) %}
+                            {% set _ = missing_fields.append('First Name') %}
+                        {% endif %}
+                        {% if not (inquiry.extracted_data.data.get('last_name') and inquiry.extracted_data.data.get('last_name') != 'N/A' and inquiry.extracted_data.data.get('last_name')|length > 0) %}
+                            {% set _ = missing_fields.append('Last Name') %}
+                        {% endif %}
+                        {% if not (inquiry.extracted_data.data.get('travel_start_date') and inquiry.extracted_data.data.get('travel_start_date') != 'N/A' and inquiry.extracted_data.data.get('travel_start_date')|length > 0) %}
+                            {% set _ = missing_fields.append('Start Date') %}
+                        {% endif %}
+                        {% if not (inquiry.extracted_data.data.get('travel_end_date') and inquiry.extracted_data.data.get('travel_end_date') != 'N/A' and inquiry.extracted_data.data.get('travel_end_date')|length > 0) %}
+                            {% set _ = missing_fields.append('End Date') %}
+                        {% endif %}
+                        {% if not (inquiry.extracted_data.data.get('trip_destination') and inquiry.extracted_data.data.get('trip_destination') != 'N/A' and inquiry.extracted_data.data.get('trip_destination')|length > 0 and inquiry.extracted_data.data.get('trip_destination')|lower not in ['none', 'not specified']) %}
+                            {% set _ = missing_fields.append('Destination') %}
+                        {% endif %}
+                        Missing: {{ missing_fields|join(', ') }}
                     </small>
                 </div>
                 {% endif %}

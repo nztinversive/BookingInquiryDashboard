@@ -354,9 +354,24 @@ def export_ready_to_quote():
                 customer_name = inquiry.primary_email_address
             
             # Calculate data completeness
-            required_fields = ['first_name', 'last_name', 'travel_start_date', 'travel_end_date', 'trip_destination']
-            filled_fields = sum(1 for field in required_fields if data.get(field) and data.get(field) != 'N/A')
-            completeness = f"{(filled_fields / len(required_fields) * 100):.0f}%"
+            filled_count = 0
+            total_required = 5
+            
+            # Check each required field properly
+            if data.get('first_name') and data.get('first_name') != 'N/A' and len(str(data.get('first_name'))) > 0:
+                filled_count += 1
+            if data.get('last_name') and data.get('last_name') != 'N/A' and len(str(data.get('last_name'))) > 0:
+                filled_count += 1
+            if data.get('travel_start_date') and data.get('travel_start_date') != 'N/A' and len(str(data.get('travel_start_date'))) > 0:
+                filled_count += 1
+            if data.get('travel_end_date') and data.get('travel_end_date') != 'N/A' and len(str(data.get('travel_end_date'))) > 0:
+                filled_count += 1
+            if (data.get('trip_destination') and data.get('trip_destination') != 'N/A' and 
+                len(str(data.get('trip_destination'))) > 0 and 
+                str(data.get('trip_destination')).lower() not in ['none', 'not specified']):
+                filled_count += 1
+                
+            completeness = f"{(filled_count / total_required * 100):.0f}%"
             
             trip_cost = data.get('trip_cost', 'N/A')
             destination = data.get('trip_destination', 'N/A')
