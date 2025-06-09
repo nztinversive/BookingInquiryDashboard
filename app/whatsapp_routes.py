@@ -95,7 +95,7 @@ def greenapi_webhook():
         current_app.logger.debug(f"Decoded Webhook payload: {json.dumps(message_payload)}")
 
         new_pending_task = PendingTask(
-            task_type='process_whatsapp_message',
+            task_type='new_whatsapp_message',
             payload=message_payload, 
             status='pending',
             scheduled_for=datetime.now(timezone.utc) 
@@ -104,7 +104,7 @@ def greenapi_webhook():
         db.session.commit()
         
         green_api_message_id = message_payload.get('idMessage', 'N/A') 
-        current_app.logger.info(f"Created PendingTask ID {new_pending_task.id} for 'process_whatsapp_message', Green API Message ID: {green_api_message_id}")
+        current_app.logger.info(f"Created PendingTask ID {new_pending_task.id} for 'new_whatsapp_message', Green API Message ID: {green_api_message_id}")
 
     except json.JSONDecodeError:
         current_app.logger.error("Webhook payload was not valid JSON.", exc_info=True)

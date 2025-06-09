@@ -199,6 +199,9 @@ def create_app():
         app.jinja_env.filters['format_contact'] = format_contact_filter
         logging.info("Registered custom Jinja filter: format_contact")
 
+        # --- Custom CLI Commands ---
+        register_cli_commands(app)
+
         # --- Configure and Start APScheduler ---
         ms_graph_config_ok = all([
             app.config.get('MS_GRAPH_CLIENT_ID'),
@@ -224,66 +227,30 @@ def create_app():
                 jobstore_url = app.config['SQLALCHEMY_DATABASE_URI']
                 jobstore_successfully_configured = False
                 try:
-                    # Attempt to add the job store.
-                    # If create_app is called multiple times with the same scheduler instance (from extensions.py),
-                    # this previously raised a ValueError if the alias 'default' was already in use.
-                    scheduler.add_jobstore(SQLAlchemyJobStore(url=jobstore_url), alias='default')
-                    logging.info("APScheduler 'default' job store added/configured.")
-                    jobstore_successfully_configured = True
-                except ValueError as ve:
-                    if 'already has a job store by the alias' in str(ve).lower(): # Check if it's the expected error
-                        logging.info("APScheduler 'default' job store was already configured (ValueError caught).")
-                        jobstore_successfully_configured = True # Assume it's usable
+                    # Check if jobstore named 'default' already exists to avoid ValueError
+                    if 'default' not in scheduler.get_jobstores():
+                        scheduler.add_jobstore(SQLAlchemyJobStore(url=jobstore_url), alias='default')
+                        logging.info("APScheduler 'default' job store added/configured.")
                     else:
-                        # Different ValueError, re-raise or log more critically
-                        logging.error(f"Unexpected ValueError configuring APScheduler job store 'default': {ve}", exc_info=True)
+                        logging.info("APScheduler 'default' job store was already configured.")
+                    jobstore_successfully_configured = True
                 except Exception as e:
                     # Catch any other exceptions during job store configuration
-                    logging.error(f"Error configuring APScheduler job store 'default': {e}", exc_info=True)
-                
-                if not jobstore_successfully_configured:
-                    # Attempt to see if the job store somehow exists despite the add_jobstore call issues
-                    # This is a fallback check, as there isn't a direct 'has_jobstore' method.
-                    # We can try to get a job from it; if it fails, it's likely not there or not working.
-                    try:
-                        scheduler.get_jobs(jobstore='default') # This will raise an exception if the jobstore doesn't exist
-                        logging.info("APScheduler 'default' job store seems to exist despite earlier add_jobstore issues.")
-                        jobstore_successfully_configured = True
-                    except Exception:
-                        logging.warning("APScheduler 'default' job store could not be confirmed after add_jobstore issues.")
-
-                poll_interval_seconds = int(app.config.get('POLL_INTERVAL_SECONDS', 300))
-                job_id = 'trigger_email_poll_job'
+                    logging.error(f"Error configuring/checking APScheduler job store 'default': {e}", exc_info=True)
+                    jobstore_successfully_configured = False
 
                 if jobstore_successfully_configured:
-                    # Check if job already exists to avoid duplicates
-                    if scheduler.get_job(job_id, jobstore='default') is None:
-                        scheduler.add_job(
-                            id=job_id,
-                            func=trigger_email_polling_task_creation, # CRITICAL: This function should not call create_app()
-                            trigger='interval',
-                            seconds=poll_interval_seconds,
-                            jobstore='default',
-                            replace_existing=True, 
-                            misfire_grace_time=60
-                        )
-                        logging.info(f"Scheduled email polling task creator job ('{job_id}') to run every {poll_interval_seconds} seconds.")
-                    else:
-                        logging.info(f"Job '{job_id}' already exists in the job store 'default'.")
-
+                    # Check if scheduler is already running to prevent errors on re-creation
                     if not scheduler.running:
                         try:
-                            scheduler.start()
-                            logging.info("APScheduler started.")
-                            # Register shutdown hook for the scheduler
-                            atexit.register(lambda: scheduler.shutdown() if scheduler.running else None)
-                            logging.info("Registered APScheduler shutdown hook.")
+                            scheduler.start(paused=False)
+                            logging.info("APScheduler started successfully.")
+                            # Ensure the scheduler shuts down when the app exits
+                            atexit.register(lambda: scheduler.shutdown())
                         except Exception as e:
-                            logging.error(f"APScheduler failed to start: {e}", exc_info=True)
+                            logging.error(f"Failed to start APScheduler: {e}", exc_info=True)
                     else:
-                        logging.info("APScheduler is already running.")
-                else:
-                    logging.warning(f"APScheduler not started and job '{job_id}' not scheduled because job store 'default' could not be configured.")
+                        logging.info("APScheduler was already running.")
 
             except ImportError as import_err:
                  logging.error(f"Could not import necessary service or task modules for scheduler: {import_err}")
@@ -296,15 +263,61 @@ def create_app():
             if not db_uri_ok: missing_configs_for_scheduler.append("Database URI")
             logging.warning(f"APScheduler WILL NOT be started due to missing configuration for: {', '.join(missing_configs_for_scheduler)}")
 
-        # --- Register CLI Commands ---
-        register_cli_commands(app)
-
         # --- Return App Instance ---
         logging.info("Flask app created successfully.")
         return app
 
 # --- CLI Command Definitions ---
 def register_cli_commands(app):
+    """Register custom CLI commands for the application."""
+    
+    @app.cli.command('fix-tasks')
+    @with_appcontext
+    def fix_stuck_whatsapp_tasks_command():
+        """Finds and fixes pending WhatsApp tasks with the old task_type."""
+        click.echo("--- Starting Task Fix Script ---")
+        
+        from .models import PendingTask
+        
+        old_task_type = 'process_whatsapp_message'
+        new_task_type = 'new_whatsapp_message'
+        time_threshold = datetime.now(timezone.utc) - timedelta(seconds=10)
+
+        try:
+            total_pending = db.session.query(PendingTask).filter_by(status='pending').count()
+            click.echo(f"Successfully connected to DB. Found {total_pending} total pending task(s).")
+            
+            tasks_to_fix = db.session.query(PendingTask).filter(
+                PendingTask.task_type == old_task_type,
+                PendingTask.status == 'pending',
+                PendingTask.created_at <= time_threshold
+            ).all()
+
+            if not tasks_to_fix:
+                click.echo(f"Query executed. No stuck tasks found with type '{old_task_type}'.")
+                click.echo("--- Script Finished ---")
+                return
+
+            click.echo(f"Found {len(tasks_to_fix)} stuck WhatsApp task(s). Updating them now...")
+
+            updated_count = 0
+            for task in tasks_to_fix:
+                task.task_type = new_task_type
+                updated_count += 1
+            
+            db.session.commit()
+
+            click.echo(f"Successfully updated {updated_count} task(s) to type '{new_task_type}'.")
+            click.echo("The background worker should now be able to process these tasks.")
+
+        except Exception as e:
+            db.session.rollback()
+            click.echo(click.style(f"An error occurred during database operation: {e}", fg='red'))
+            click.echo("Database transaction has been rolled back.")
+        
+        click.echo("--- Script Finished ---")
+
+
     @app.cli.command('seed-sample')
     @with_appcontext
     def seed_sample_inquiry():
