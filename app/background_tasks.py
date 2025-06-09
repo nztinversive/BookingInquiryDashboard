@@ -661,8 +661,8 @@ def handle_task(task_type, payload, app_for_context):
         logging.info(f"[TaskDispatcher] Handling 'poll_all_new_emails' task.")
         poll_new_emails(app_for_context) 
         return {"status": "success", "message": "Email polling cycle initiated/completed."}
-    elif task_type == 'process_whatsapp_message':
-        logging.info(f"[TaskDispatcher] Handling 'process_whatsapp_message' task.")
+    elif task_type == 'new_whatsapp_message':
+        logging.info(f"[TaskDispatcher] Handling 'new_whatsapp_message' task.")
         # Pass the app_for_context to the new handler
         return handle_new_whatsapp_message(payload, app_for_context)
     else:
