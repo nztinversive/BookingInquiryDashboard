@@ -482,7 +482,6 @@ def extract_travel_data(email_body_html):
     final_data["cost_per_traveler"] = cost_per_traveler
 
     # 6. Post-process travel dates to ensure they're not in the past
-    from datetime import datetime, timedelta
     current_date = datetime.now().date()
     current_year = current_date.year  # Should be 2025
     

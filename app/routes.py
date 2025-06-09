@@ -152,34 +152,6 @@ def all_inquiries_dashboard():
 @login_required
 def dashboard_customer_view():
     """Render the customer-centric dashboard view as the default."""
-    
-    # --- ONE-TIME FIX FOR STUCK WHATSAPP TASKS ---
-    try:
-        from .models import PendingTask
-        from datetime import datetime, timezone, timedelta
-
-        old_task_type = 'process_whatsapp_message'
-        new_task_type = 'new_whatsapp_message'
-        
-        # Using a direct query to be safe
-        tasks_to_fix = db.session.query(PendingTask).filter(PendingTask.task_type == old_task_type).all()
-        
-        if tasks_to_fix:
-            updated_count = 0
-            for task in tasks_to_fix:
-                task.task_type = new_task_type
-                updated_count += 1
-            
-            db.session.commit()
-            flash(f"SUCCESS: Found and fixed {updated_count} stuck WhatsApp processing task(s). They will be processed shortly.", "success")
-        # else:
-            # flash("Checked for stuck tasks, none were found.", "info")
-
-    except Exception as e:
-        db.session.rollback()
-        flash(f"ERROR: Could not run the task fix script: {e}", "danger")
-    # --- END OF ONE-TIME FIX ---
-
     try:
         # Base query: Fetch inquiries and their extracted data
         inquiries_with_data = Inquiry.query.options(
