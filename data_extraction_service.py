@@ -264,14 +264,14 @@ def _call_openai_for_extraction(system_message, user_content):
     logging.debug("Making OpenAI call for extraction...")
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o", # Use a more powerful model for structured extraction
+            model="gpt-4o-mini", # Use a more powerful model for structured extraction
             response_format={ "type": "json_object" }, # Request JSON output
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": user_content}
             ],
             temperature=0.2, # Low temperature for factual extraction
-            max_tokens=1500, # Allow more tokens for potentially larger JSON output
+            max_tokens=1000, # Allow more tokens for potentially larger JSON output
             timeout=120 # Longer timeout for potentially complex extraction
         )
         # Log attempt details
