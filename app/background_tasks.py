@@ -139,6 +139,7 @@ def handle_process_single_email(task_payload):
             new_email_instance = Email(
                 graph_id=email_graph_id,
                 subject=email_summary.get('subject'),
+                body=email_body_html,  # Store the email body content
                 received_at=received_dt,
                 processing_status='processing', # Initial status
                 sender_address=sender_address,

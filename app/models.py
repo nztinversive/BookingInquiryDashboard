@@ -67,6 +67,7 @@ class Email(db.Model):
     subject = db.Column(db.String, nullable=True)
     sender_address = db.Column(db.String, nullable=True)
     sender_name = db.Column(db.String, nullable=True)
+    body = db.Column(db.Text, nullable=True)
     received_at = db.Column(db.DateTime(timezone=True), nullable=True)
     processed_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     processing_status = db.Column(db.String, default='pending')
