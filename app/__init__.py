@@ -228,7 +228,9 @@ def create_app():
                 jobstore_successfully_configured = False
                 try:
                     # Check if jobstore named 'default' already exists to avoid ValueError
-                    if 'default' not in scheduler.get_jobstores():
+                    # Use state property instead of get_jobstores() for newer APScheduler versions
+                    existing_jobstores = getattr(scheduler, '_jobstores', {})
+                    if 'default' not in existing_jobstores:
                         scheduler.add_jobstore(SQLAlchemyJobStore(url=jobstore_url), alias='default')
                         logging.info("APScheduler 'default' job store added/configured.")
                     else:

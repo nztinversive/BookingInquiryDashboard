@@ -437,7 +437,7 @@
                         {% set has_payment_date = data.get('initial_trip_deposit_date') and data.get('initial_trip_deposit_date') != 'N/A' and data.get('initial_trip_deposit_date')|length > 0 %}
                         
                         {# Check 6: Total Trip Cost #}
-                        {% set has_trip_cost = data.get('trip_cost') and data.get('trip_cost') != 'N/A' and data.get('trip_cost')|length > 0 and data.get('trip_cost') != '0' %}
+                        {% set has_trip_cost = data.get('trip_cost') and data.get('trip_cost') != 'N/A' and data.get('trip_cost')|string|length > 0 and data.get('trip_cost')|string != '0' %}
                         
                         {# Calculate completion count #}
                         {% set completed_items = 0 %}
