@@ -22,12 +22,21 @@ class Config:
 
     # RQ/Redis Configuration
     REDIS_URL = os.environ.get('REDIS_URL') or 'redis://localhost:6379/0'
-    POLL_INTERVAL_SECONDS = int(os.environ.get('POLL_INTERVAL_SECONDS') or 120)
+    POLL_INTERVAL_SECONDS = int(os.environ.get('POLL_INTERVAL_SECONDS') or 30)
 
     # WaAPI Configuration
     WAAPI_API_TOKEN = os.environ.get('WAAPI_API_TOKEN')
     WAAPI_INSTANCE_ID = os.environ.get('WAAPI_INSTANCE_ID')
     WAAPI_WEBHOOK_SECRET = os.environ.get('WAAPI_WEBHOOK_SECRET')
+
+    # Performance optimization configurations
+    PG_WORKER_SLEEP_SECONDS = int(os.environ.get('PG_WORKER_SLEEP_SECONDS') or 1)
+    API_TIMEOUT_SECONDS = int(os.environ.get('API_TIMEOUT_SECONDS') or 15)
+
+    # Fast processing flags
+    ENABLE_PERFORMANCE_MODE = os.environ.get('ENABLE_PERFORMANCE_MODE', 'true').lower() == 'true'
+    SKIP_ATTACHMENTS_FOR_SPEED = os.environ.get('SKIP_ATTACHMENTS_FOR_SPEED', 'false').lower() == 'true'
+    CACHE_EXTRACTION_RESULTS = os.environ.get('CACHE_EXTRACTION_RESULTS', 'true').lower() == 'true'
 
 class DevelopmentConfig(Config):
     """Development configuration."""

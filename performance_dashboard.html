@@ -1,0 +1,50 @@
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Processing Performance Monitor</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            .metric { padding: 10px; margin: 5px; border: 1px solid #ccc; border-radius: 5px; }
+            .good { background-color: #d4edda; }
+            .warning { background-color: #fff3cd; }
+            .error { background-color: #f8d7da; }
+        </style>
+    </head>
+    <body>
+        <h1>🚀 Processing Performance Monitor</h1>
+        <div class="metric good">
+            <h3>Target: WhatsApp → Dashboard</h3>
+            <p><strong>Goal:</strong> Under 2 minutes</p>
+            <p><strong>Current:</strong> Check logs for timing</p>
+        </div>
+        <div class="metric good">
+            <h3>Target: Email → Dashboard</h3>
+            <p><strong>Goal:</strong> Under 90 seconds</p>
+            <p><strong>Current:</strong> Check logs for timing</p>
+        </div>
+        <div class="metric warning">
+            <h3>Performance Settings</h3>
+            <ul>
+                <li>Email polling: Every 30 seconds</li>
+                <li>Worker polling: Every 1 second</li>
+                <li>API timeout: 15 seconds</li>
+                <li>Attachments: Skipped for speed</li>
+            </ul>
+        </div>
+        <div class="metric">
+            <h3>Monitoring Commands</h3>
+            <code>
+                # Check processing times in logs<br>
+                grep "Total time:" logs/app.log | tail -10<br><br>
+                
+                # Check API call times<br>
+                grep "API calls completed" logs/app.log | tail -10<br><br>
+                
+                # Check worker polling<br>
+                grep "Postgres Worker started" logs/app.log | tail -5
+            </code>
+        </div>
+    </body>
+    </html>
+    

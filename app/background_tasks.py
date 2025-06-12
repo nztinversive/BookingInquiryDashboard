@@ -39,6 +39,9 @@ def handle_process_single_email(task_payload):
         task_payload (dict): A dictionary containing 'email_summary' and 'classified_intent'.
                              Example: {"email_summary": {...}, "classified_intent": "..."}
     """
+    # Performance tracking
+    processing_start_time = datetime.now(timezone.utc)
+    
     app = current_app._get_current_object() # Ensure we have the app object for context
     with app.app_context():
         from . import db # Get db from the app context
@@ -60,6 +63,9 @@ def handle_process_single_email(task_payload):
 
         log_prefix = f"[TaskHandler Email: {email_graph_id}]"
         logging.info(f"{log_prefix} Starting processing...")
+
+        # Performance: Track API call timing
+        api_start_time = datetime.now(timezone.utc)
 
         # --- Fetching and Extraction (Can happen outside DB transaction for some parts) ---
         email_details = None
@@ -94,12 +100,24 @@ def handle_process_single_email(task_payload):
             logging.info(f"{log_prefix} Validation status: {validation_status}. Missing: {missing_fields_list}")
 
             logging.info(f"{log_prefix} Fetching attachments list...")
-            attachments_list = ms_fetch_attachments_list(email_graph_id)
+            attachments_list = []
+            
+            # Performance optimization: Skip attachments in performance mode
+            if current_app.config.get('SKIP_ATTACHMENTS_FOR_SPEED', False):
+                logging.info(f"{log_prefix} Skipping attachments fetch (performance mode enabled)")
+                attachments_list = []
+            else:
+                attachments_list = ms_fetch_attachments_list(email_graph_id)
 
         except Exception as fetch_extract_err:
             logging.error(f"{log_prefix} Error during fetch/extraction: {fetch_extract_err}", exc_info=True)
             # Re-raise to be caught by the worker's error handling for the task
             raise
+
+        # Performance tracking: Log API call duration
+        api_end_time = datetime.now(timezone.utc)
+        api_duration = (api_end_time - api_start_time).total_seconds()
+        logging.info(f"{log_prefix} API calls completed in {api_duration:.2f}s")
 
         # --- DB Operations: Inquiry finding/creation, Email creation, Data merging ---
         # Ensure this part is idempotent or handles retries gracefully if the task is re-run
@@ -207,8 +225,13 @@ def handle_process_single_email(task_payload):
                 inquiry.updated_at = datetime.now(timezone.utc)
 
             db.session.commit()
-            logging.info(f"{log_prefix} Successfully processed and committed to DB.")
-            return {"status": "success", "inquiry_id": inquiry.id if inquiry else None}
+            
+            # Performance tracking: Log total processing time
+            processing_end_time = datetime.now(timezone.utc)
+            total_duration = (processing_end_time - processing_start_time).total_seconds()
+            logging.info(f"{log_prefix} Successfully processed and committed to DB. Total time: {total_duration:.2f}s")
+            
+            return {"status": "success", "inquiry_id": inquiry.id if inquiry else None, "processing_time": total_duration}
 
         except IntegrityError as ie:
             db.session.rollback()
