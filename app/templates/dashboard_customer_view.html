@@ -113,6 +113,48 @@
     border-radius: 2px;
     transition: width 0.3s ease;
 }
+
+/* Requirements Checklist Styles */
+.requirements-checklist {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+}
+
+.checklist-items {
+    margin: 0.5rem 0;
+}
+
+.checklist-item {
+    padding: 0.15rem 0;
+    transition: all 0.2s ease;
+}
+
+.checklist-item:hover {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 0.25rem;
+    padding-left: 0.25rem;
+    margin-left: -0.25rem;
+}
+
+.checklist-item i {
+    font-size: 0.75rem;
+    width: 12px;
+}
+
+.requirements-checklist .progress-indicator {
+    height: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+/* Status badges */
+.badge {
+    font-size: 0.7rem;
+    padding: 0.35rem 0.65rem;
+}
 </style>
 {% endblock %}
 
@@ -358,50 +400,137 @@
                         </div>
                     </div>
 
-                    <!-- Progress Indicator -->
-                    {% set data_completeness = 0 %}
+                    <!-- Data Requirements Checklist -->
                     {% if item.data %}
-                        {% set filled_count = 0 %}
-                        {% set total_required = 5 %}
+                        {% set data = item.data.data %}
                         
-                        {# Check first_name #}
-                        {% if item.data.data.get('first_name') and item.data.data.get('first_name') != 'N/A' and item.data.data.get('first_name')|length > 0 %}
-                            {% set filled_count = filled_count + 1 %}
+                        {# Check 1: Home Address #}
+                        {% set has_home_address = data.get('home_address') and data.get('home_address') != 'N/A' and data.get('home_address')|length > 0 %}
+                        
+                        {# Check 2: Traveler Details (first name, last name, DOB) #}
+                        {% set has_traveler_details = false %}
+                        {% set travelers = data.get('travelers', []) %}
+                        {% if travelers and travelers|length > 0 %}
+                            {% set complete_travelers = 0 %}
+                            {% for traveler in travelers %}
+                                {% if traveler.get('first_name') and traveler.get('last_name') and traveler.get('date_of_birth') %}
+                                    {% set complete_travelers = complete_travelers + 1 %}
+                                {% endif %}
+                            {% endfor %}
+                            {% if complete_travelers == travelers|length %}
+                                {% set has_traveler_details = true %}
+                            {% endif %}
+                        {% else %}
+                            {# Fallback to basic first_name/last_name if no travelers array #}
+                            {% if data.get('first_name') and data.get('last_name') and data.get('date_of_birth') %}
+                                {% set has_traveler_details = true %}
+                            {% endif %}
                         {% endif %}
                         
-                        {# Check last_name #}
-                        {% if item.data.data.get('last_name') and item.data.data.get('last_name') != 'N/A' and item.data.data.get('last_name')|length > 0 %}
-                            {% set filled_count = filled_count + 1 %}
-                        {% endif %}
+                        {# Check 3: Trip Dates #}
+                        {% set has_trip_dates = data.get('travel_start_date') and data.get('travel_start_date') != 'N/A' and data.get('travel_end_date') and data.get('travel_end_date') != 'N/A' %}
                         
-                        {# Check travel_start_date #}
-                        {% if item.data.data.get('travel_start_date') and item.data.data.get('travel_start_date') != 'N/A' and item.data.data.get('travel_start_date')|length > 0 %}
-                            {% set filled_count = filled_count + 1 %}
-                        {% endif %}
+                        {# Check 4: Destination #}
+                        {% set has_destination = data.get('trip_destination') and data.get('trip_destination') != 'N/A' and data.get('trip_destination')|length > 0 and data.get('trip_destination')|lower not in ['none', 'not specified'] %}
                         
-                        {# Check travel_end_date #}
-                        {% if item.data.data.get('travel_end_date') and item.data.data.get('travel_end_date') != 'N/A' and item.data.data.get('travel_end_date')|length > 0 %}
-                            {% set filled_count = filled_count + 1 %}
-                        {% endif %}
+                        {# Check 5: First Payment Date #}
+                        {% set has_payment_date = data.get('initial_trip_deposit_date') and data.get('initial_trip_deposit_date') != 'N/A' and data.get('initial_trip_deposit_date')|length > 0 %}
                         
-                        {# Check trip_destination #}
-                        {% if item.data.data.get('trip_destination') and item.data.data.get('trip_destination') != 'N/A' and item.data.data.get('trip_destination')|length > 0 and item.data.data.get('trip_destination')|lower != 'none' and item.data.data.get('trip_destination')|lower != 'not specified' %}
-                            {% set filled_count = filled_count + 1 %}
-                        {% endif %}
+                        {# Check 6: Total Trip Cost #}
+                        {% set has_trip_cost = data.get('trip_cost') and data.get('trip_cost') != 'N/A' and data.get('trip_cost')|length > 0 and data.get('trip_cost') != '0' %}
                         
-                        {% set data_completeness = (filled_count / total_required * 100)|round %}
+                        {# Calculate completion count #}
+                        {% set completed_items = 0 %}
+                        {% if has_home_address %}{% set completed_items = completed_items + 1 %}{% endif %}
+                        {% if has_traveler_details %}{% set completed_items = completed_items + 1 %}{% endif %}
+                        {% if has_trip_dates %}{% set completed_items = completed_items + 1 %}{% endif %}
+                        {% if has_destination %}{% set completed_items = completed_items + 1 %}{% endif %}
+                        {% if has_payment_date %}{% set completed_items = completed_items + 1 %}{% endif %}
+                        {% if has_trip_cost %}{% set completed_items = completed_items + 1 %}{% endif %}
+                        
+                        <div class="requirements-checklist mt-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <small class="text-secondary fw-medium">Required Information</small>
+                                <small class="text-secondary">{{ completed_items }}/6 Complete</small>
+                            </div>
+                            
+                            <div class="checklist-items">
+                                <!-- 1. Home Address -->
+                                <div class="checklist-item d-flex align-items-center mb-1">
+                                    <i class="fas fa-{{ 'check-circle text-success' if has_home_address else 'times-circle text-danger' }} me-2 small"></i>
+                                    <span class="small {{ 'text-success' if has_home_address else 'text-warning' }}">Home Address</span>
+                                </div>
+                                
+                                <!-- 2. Traveler Details -->
+                                <div class="checklist-item d-flex align-items-center mb-1">
+                                    <i class="fas fa-{{ 'check-circle text-success' if has_traveler_details else 'times-circle text-danger' }} me-2 small"></i>
+                                    <span class="small {{ 'text-success' if has_traveler_details else 'text-warning' }}">
+                                        Traveler Names & DOB
+                                        {% if travelers and travelers|length > 0 %}
+                                            ({{ complete_travelers if has_traveler_details else '0' }}/{{ travelers|length }})
+                                        {% endif %}
+                                    </span>
+                                </div>
+                                
+                                <!-- 3. Trip Dates -->
+                                <div class="checklist-item d-flex align-items-center mb-1">
+                                    <i class="fas fa-{{ 'check-circle text-success' if has_trip_dates else 'times-circle text-danger' }} me-2 small"></i>
+                                    <span class="small {{ 'text-success' if has_trip_dates else 'text-warning' }}">Trip Dates</span>
+                                </div>
+                                
+                                <!-- 4. Destination -->
+                                <div class="checklist-item d-flex align-items-center mb-1">
+                                    <i class="fas fa-{{ 'check-circle text-success' if has_destination else 'times-circle text-danger' }} me-2 small"></i>
+                                    <span class="small {{ 'text-success' if has_destination else 'text-warning' }}">Destination</span>
+                                </div>
+                                
+                                <!-- 5. First Payment Date -->
+                                <div class="checklist-item d-flex align-items-center mb-1">
+                                    <i class="fas fa-{{ 'check-circle text-success' if has_payment_date else 'times-circle text-danger' }} me-2 small"></i>
+                                    <span class="small {{ 'text-success' if has_payment_date else 'text-warning' }}">First Payment Date</span>
+                                </div>
+                                
+                                <!-- 6. Total Trip Cost -->
+                                <div class="checklist-item d-flex align-items-center mb-1">
+                                    <i class="fas fa-{{ 'check-circle text-success' if has_trip_cost else 'times-circle text-danger' }} me-2 small"></i>
+                                    <span class="small {{ 'text-success' if has_trip_cost else 'text-warning' }}">Total Trip Cost</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Overall Progress Bar -->
+                            {% set completion_percentage = (completed_items / 6 * 100)|round %}
+                            <div class="mt-2">
+                                <div class="progress-indicator">
+                                    <div class="progress-bar bg-{{ 'success' if completion_percentage == 100 else 'warning' if completion_percentage > 50 else 'danger' }}" 
+                                         style="width: {{ completion_percentage }}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="requirements-checklist mt-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <small class="text-secondary fw-medium">Required Information</small>
+                                <small class="text-secondary">0/6 Complete</small>
+                            </div>
+                            <div class="text-center py-2">
+                                <small class="text-muted">No data extracted yet</small>
+                            </div>
+                        </div>
                     {% endif %}
                     
                     <div class="d-flex justify-content-between align-items-center mt-3">
                         <div class="flex-grow-1 me-3">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <small class="text-secondary">Data Completeness</small>
-                                <small class="text-secondary">{{ data_completeness }}%</small>
-                            </div>
-                            <div class="progress-indicator">
-                                <div class="progress-bar bg-{{ 'success' if data_completeness > 80 else 'warning' if data_completeness > 40 else 'danger' }}" 
-                                     style="width: {{ data_completeness }}%"></div>
-                            </div>
+                            {% if item.data %}
+                                {% if completed_items == 6 %}
+                                    <span class="badge bg-success"><i class="fas fa-check me-1"></i>Ready to Quote</span>
+                                {% elif completed_items >= 4 %}
+                                    <span class="badge bg-warning"><i class="fas fa-clock me-1"></i>Almost Ready</span>
+                                {% else %}
+                                    <span class="badge bg-danger"><i class="fas fa-exclamation me-1"></i>Needs Info</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge bg-secondary"><i class="fas fa-hourglass me-1"></i>Processing</span>
+                            {% endif %}
                         </div>
                         <a href="{{ url_for('main.inquiry_detail', inquiry_id=item.inquiry.id) }}" 
                            class="btn btn-outline-light btn-sm">
