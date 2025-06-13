@@ -451,7 +451,12 @@
                         {% if travelers and travelers|length > 0 %}
                             {% set complete_travelers = 0 %}
                             {% for traveler in travelers %}
-                                {% if traveler.get('first_name') and traveler.get('last_name') and traveler.get('date_of_birth') %}
+                                {% set first_name = traveler.get('first_name') %}
+                                {% if first_name is none %}{% set first_name = '' %}{% endif %}
+                                {% set last_name = traveler.get('last_name') %}
+                                {% if last_name is none %}{% set last_name = '' %}{% endif %}
+                                {% set name = (first_name + ' ' + last_name).strip() %}
+                                {% if name and traveler.get('date_of_birth') %}
                                     {% set complete_travelers = complete_travelers + 1 %}
                                 {% endif %}
                             {% endfor %}
@@ -522,13 +527,17 @@
                                         {% for traveler in travelers[:2] %} {# Show up to 2 travelers in preview #}
                                             <div class="d-flex align-items-center mb-1" style="padding: 0.25rem 0;">
                                                 <div class="me-2" style="width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(135deg, #007bff, #0056b3); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.6rem;">
-                                                    {% set name = (traveler.get('first_name', '') + ' ' + traveler.get('last_name', '')).strip() %}
+                                                    {% set first_name = traveler.get('first_name') %}
+                                                    {% if first_name is none %}{% set first_name = '' %}{% endif %}
+                                                    {% set last_name = traveler.get('last_name') %}
+                                                    {% if last_name is none %}{% set last_name = '' %}{% endif %}
+                                                    {% set name = (first_name + ' ' + last_name).strip() %}
                                                     {{ name[:1]|upper if name else 'T' }}
                                                 </div>
                                                 <div class="flex-grow-1">
                                                     <div style="font-size: 0.7rem; font-weight: 500; color: #e2e8f0; line-height: 1.1;">
-                                                        {% if traveler.get('first_name') and traveler.get('last_name') %}
-                                                            {{ traveler.get('first_name') }} {{ traveler.get('last_name') }}
+                                                        {% if name %}
+                                                            {{ name }}
                                                         {% else %}
                                                             <span class="text-muted">Name missing</span>
                                                         {% endif %}
@@ -542,7 +551,7 @@
                                                     </div>
                                                 </div>
                                                 <div style="margin-left: auto;">
-                                                    {% if traveler.get('first_name') and traveler.get('last_name') and traveler.get('date_of_birth') and traveler.get('date_of_birth') != 'N/A' %}
+                                                    {% if name and traveler.get('date_of_birth') and traveler.get('date_of_birth') != 'N/A' %}
                                                         <i class="fas fa-check text-success" style="font-size: 0.7rem;"></i>
                                                     {% else %}
                                                         <i class="fas fa-exclamation text-warning" style="font-size: 0.7rem;"></i>
@@ -559,8 +568,8 @@
                                 {% elif data.get('first_name') or data.get('last_name') or data.get('date_of_birth') %}
                                     <div class="travelers-preview mt-2 p-2" style="background: rgba(255, 255, 255, 0.02); border-radius: 0.25rem;">
                                         <div class="d-flex align-items-center mb-1" style="padding: 0.25rem 0;">
-                                            <div class="me-2" style="width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(135deg, #007bff, #0056b3); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.6rem;">
-                                                {% set name = (data.get('first_name', '') + ' ' + data.get('last_name', '')).strip() %}
+                                            <div class="me-2" style="width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(135deg, #007bff, #0056b3); display: flex; align-items-center; justify-content: center; color: white; font-weight: bold; font-size: 0.6rem;">
+                                                {% set name = ((data.get('first_name') or '') ~ ' ' ~ (data.get('last_name') or '')).strip() %}
                                                 {{ name[:1]|upper if name else 'T' }}
                                             </div>
                                             <div class="flex-grow-1">

@@ -320,7 +320,7 @@
                                         <div class="traveler-card mb-2 p-2 border rounded bg-dark bg-opacity-25">
                                             <div class="d-flex align-items-center">
                                                 <div class="traveler-avatar me-2">
-                                                    {% set name = (traveler.get('first_name', '') + ' ' + traveler.get('last_name', '')).strip() %}
+                                                    {% set name = ((traveler.get('first_name') or '') + ' ' + (traveler.get('last_name') or '')).strip() %}
                                                     {{ name[:2]|upper if name else 'T' }}
                                                 </div>
                                                 <div class="flex-grow-1">
@@ -364,7 +364,7 @@
                                 <div class="traveler-card mb-2 p-2 border rounded bg-dark bg-opacity-25">
                                     <div class="d-flex align-items-center">
                                         <div class="traveler-avatar me-2">
-                                            {% set name = (first_name + ' ' + last_name).strip() %}
+                                            {% set name = ((first_name or 'N/A') + ' ' + (last_name or 'N/A')).strip() %}
                                             {{ name[:2]|upper if name != 'N/A N/A' else 'T' }}
                                         </div>
                                         <div class="flex-grow-1">
