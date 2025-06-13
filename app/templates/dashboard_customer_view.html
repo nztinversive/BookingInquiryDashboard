@@ -155,6 +155,44 @@
     font-size: 0.7rem;
     padding: 0.35rem 0.65rem;
 }
+
+/* Traveler Preview Styling */
+.travelers-preview {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 0.25rem;
+    padding: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.traveler-preview-item {
+    padding: 0.25rem 0;
+}
+
+.traveler-mini-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 0.65rem;
+}
+
+.traveler-name {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #e2e8f0;
+    line-height: 1.2;
+}
+
+.traveler-dob {
+    font-size: 0.65rem;
+    color: #94a3b8;
+    line-height: 1.2;
+}
 </style>
 {% endblock %}
 
@@ -467,10 +505,90 @@
                                     <span class="small {{ 'text-success' if has_traveler_details else 'text-warning' }}">
                                         Traveler Names & DOB
                                         {% if travelers and travelers|length > 0 %}
-                                            ({{ complete_travelers if has_traveler_details else '0' }}/{{ travelers|length }})
+                                            ({{ complete_travelers if has_traveler_details else complete_travelers|default(0) }}/{{ travelers|length }})
+                                        {% else %}
+                                            {% if data.get('first_name') and data.get('last_name') and data.get('date_of_birth') %}
+                                                (1/1)
+                                            {% else %}
+                                                (0/1)
+                                            {% endif %}
                                         {% endif %}
                                     </span>
                                 </div>
+                                
+                                <!-- Traveler Details Preview -->
+                                {% if travelers and travelers|length > 0 %}
+                                    <div class="travelers-preview mt-2 p-2" style="background: rgba(255, 255, 255, 0.02); border-radius: 0.25rem;">
+                                        {% for traveler in travelers[:2] %} {# Show up to 2 travelers in preview #}
+                                            <div class="d-flex align-items-center mb-1" style="padding: 0.25rem 0;">
+                                                <div class="me-2" style="width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(135deg, #007bff, #0056b3); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.6rem;">
+                                                    {% set name = (traveler.get('first_name', '') + ' ' + traveler.get('last_name', '')).strip() %}
+                                                    {{ name[:1]|upper if name else 'T' }}
+                                                </div>
+                                                <div class="flex-grow-1">
+                                                    <div style="font-size: 0.7rem; font-weight: 500; color: #e2e8f0; line-height: 1.1;">
+                                                        {% if traveler.get('first_name') and traveler.get('last_name') %}
+                                                            {{ traveler.get('first_name') }} {{ traveler.get('last_name') }}
+                                                        {% else %}
+                                                            <span class="text-muted">Name missing</span>
+                                                        {% endif %}
+                                                    </div>
+                                                    <div style="font-size: 0.6rem; color: #94a3b8; line-height: 1.1;">
+                                                        {% if traveler.get('date_of_birth') and traveler.get('date_of_birth') != 'N/A' %}
+                                                            DOB: {{ traveler.get('date_of_birth') }}
+                                                        {% else %}
+                                                            <span class="text-muted">DOB missing</span>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                                <div style="margin-left: auto;">
+                                                    {% if traveler.get('first_name') and traveler.get('last_name') and traveler.get('date_of_birth') and traveler.get('date_of_birth') != 'N/A' %}
+                                                        <i class="fas fa-check text-success" style="font-size: 0.7rem;"></i>
+                                                    {% else %}
+                                                        <i class="fas fa-exclamation text-warning" style="font-size: 0.7rem;"></i>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                        {% if travelers|length > 2 %}
+                                            <div class="text-center text-muted mt-1">
+                                                <small style="font-size: 0.6rem;">+ {{ travelers|length - 2 }} more traveler{{ 's' if travelers|length - 2 != 1 else '' }}</small>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                {% elif data.get('first_name') or data.get('last_name') or data.get('date_of_birth') %}
+                                    <div class="travelers-preview mt-2 p-2" style="background: rgba(255, 255, 255, 0.02); border-radius: 0.25rem;">
+                                        <div class="d-flex align-items-center mb-1" style="padding: 0.25rem 0;">
+                                            <div class="me-2" style="width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(135deg, #007bff, #0056b3); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.6rem;">
+                                                {% set name = (data.get('first_name', '') + ' ' + data.get('last_name', '')).strip() %}
+                                                {{ name[:1]|upper if name else 'T' }}
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <div style="font-size: 0.7rem; font-weight: 500; color: #e2e8f0; line-height: 1.1;">
+                                                    {% if data.get('first_name') and data.get('last_name') %}
+                                                        {{ data.get('first_name') }} {{ data.get('last_name') }}
+                                                    {% else %}
+                                                        <span class="text-muted">Name missing</span>
+                                                    {% endif %}
+                                                </div>
+                                                <div style="font-size: 0.6rem; color: #94a3b8; line-height: 1.1;">
+                                                    {% if data.get('date_of_birth') and data.get('date_of_birth') != 'N/A' %}
+                                                        DOB: {{ data.get('date_of_birth') }}
+                                                    {% else %}
+                                                        <span class="text-muted">DOB missing</span>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                            <div style="margin-left: auto;">
+                                                {% if data.get('first_name') and data.get('last_name') and data.get('date_of_birth') and data.get('date_of_birth') != 'N/A' %}
+                                                    <i class="fas fa-check text-success" style="font-size: 0.7rem;"></i>
+                                                {% else %}
+                                                    <i class="fas fa-exclamation text-warning" style="font-size: 0.7rem;"></i>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endif %}
                                 
                                 <!-- 3. Trip Dates -->
                                 <div class="checklist-item d-flex align-items-center mb-1">

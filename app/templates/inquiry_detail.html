@@ -176,6 +176,31 @@
     color: #94a3b8;
     font-style: italic;
 }
+
+/* Traveler Cards Styling */
+.traveler-card {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    transition: all 0.2s ease;
+}
+
+.traveler-card:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.traveler-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 0.75rem;
+}
 </style>
 {% endblock %}
 
@@ -281,14 +306,110 @@
 
                 <div class="detail-grid">
                     {% set data = inquiry.extracted_data.data %}
-                    <div class="detail-item">
+                    
+                    <!-- Travelers Section -->
+                    <div class="detail-item" style="grid-column: span 2;">
                         <div class="detail-item-label">
-                            <i class="fas fa-user me-1"></i> Customer Name
+                            <i class="fas fa-users me-1"></i> Travelers
                         </div>
                         <div class="detail-item-value">
-                            {% set first_name = data.get('first_name') or 'N/A' %}
-                            {% set last_name = data.get('last_name') or 'N/A' %}
-                            {{ first_name }} {{ last_name }}
+                            {% set travelers = data.get('travelers', []) %}
+                            {% if travelers and travelers|length > 0 %}
+                                <div class="travelers-grid">
+                                    {% for traveler in travelers %}
+                                        <div class="traveler-card mb-2 p-2 border rounded bg-dark bg-opacity-25">
+                                            <div class="d-flex align-items-center">
+                                                <div class="traveler-avatar me-2">
+                                                    {% set name = (traveler.get('first_name', '') + ' ' + traveler.get('last_name', '')).strip() %}
+                                                    {{ name[:2]|upper if name else 'T' }}
+                                                </div>
+                                                <div class="flex-grow-1">
+                                                    <div class="fw-bold text-white">
+                                                        {% if traveler.get('first_name') and traveler.get('last_name') %}
+                                                            {{ traveler.get('first_name') }} {{ traveler.get('last_name') }}
+                                                        {% else %}
+                                                            <span class="text-muted">Name not provided</span>
+                                                        {% endif %}
+                                                    </div>
+                                                    <div class="small text-secondary">
+                                                        {% if traveler.get('date_of_birth') and traveler.get('date_of_birth') != 'N/A' %}
+                                                            <i class="fas fa-birthday-cake me-1"></i>{{ traveler.get('date_of_birth') }}
+                                                        {% else %}
+                                                            <i class="fas fa-birthday-cake me-1"></i><span class="text-muted">DOB not provided</span>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                                <div class="text-end">
+                                                    {% if traveler.get('first_name') and traveler.get('last_name') and traveler.get('date_of_birth') and traveler.get('date_of_birth') != 'N/A' %}
+                                                        <i class="fas fa-check-circle text-success"></i>
+                                                    {% else %}
+                                                        <i class="fas fa-exclamation-circle text-warning"></i>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                                <div class="mt-2">
+                                    <small class="text-secondary">
+                                        {{ travelers|length }} traveler{{ 's' if travelers|length != 1 else '' }} total
+                                    </small>
+                                </div>
+                            {% else %}
+                                {# Fallback to basic first_name/last_name/DOB if no travelers array #}
+                                {% set first_name = data.get('first_name') or 'N/A' %}
+                                {% set last_name = data.get('last_name') or 'N/A' %}
+                                {% set dob = data.get('date_of_birth') %}
+                                
+                                <div class="traveler-card mb-2 p-2 border rounded bg-dark bg-opacity-25">
+                                    <div class="d-flex align-items-center">
+                                        <div class="traveler-avatar me-2">
+                                            {% set name = (first_name + ' ' + last_name).strip() %}
+                                            {{ name[:2]|upper if name != 'N/A N/A' else 'T' }}
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <div class="fw-bold text-white">
+                                                {% if first_name != 'N/A' and last_name != 'N/A' %}
+                                                    {{ first_name }} {{ last_name }}
+                                                {% else %}
+                                                    <span class="text-muted">Name not provided</span>
+                                                {% endif %}
+                                            </div>
+                                            <div class="small text-secondary">
+                                                {% if dob and dob != 'N/A' and dob|length > 0 %}
+                                                    <i class="fas fa-birthday-cake me-1"></i>{{ dob }}
+                                                {% else %}
+                                                    <i class="fas fa-birthday-cake me-1"></i><span class="text-muted">DOB not provided</span>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div class="text-end">
+                                            {% if first_name != 'N/A' and last_name != 'N/A' and dob and dob != 'N/A' and dob|length > 0 %}
+                                                <i class="fas fa-check-circle text-success"></i>
+                                            {% else %}
+                                                <i class="fas fa-exclamation-circle text-warning"></i>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mt-1">
+                                    <small class="text-secondary">1 traveler (legacy format)</small>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="detail-item">
+                        <div class="detail-item-label">
+                            <i class="fas fa-home me-1"></i> Home Address
+                        </div>
+                        <div class="detail-item-value">
+                            {% set home_address = data.get('home_address') %}
+                            {% if home_address and home_address != 'N/A' and home_address|length > 0 %}
+                                {{ home_address }}
+                            {% else %}
+                                <span class="text-muted">Not provided</span>
+                            {% endif %}
                         </div>
                     </div>
 
@@ -327,6 +448,20 @@
                                 ${{ trip_cost }}
                             {% else %}
                                 <span class="text-muted">Budget not specified</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="detail-item">
+                        <div class="detail-item-label">
+                            <i class="fas fa-calendar-check me-1"></i> First Payment Date
+                        </div>
+                        <div class="detail-item-value">
+                            {% set payment_date = data.get('initial_trip_deposit_date') %}
+                            {% if payment_date and payment_date != 'N/A' and payment_date|length > 0 %}
+                                {{ payment_date }}
+                            {% else %}
+                                <span class="text-muted">Not provided</span>
                             {% endif %}
                         </div>
                     </div>
@@ -459,30 +594,53 @@
             <div class="detail-section text-center">
                 <h5 class="text-white mb-3">Data Completeness</h5>
                 {% set filled_count = 0 %}
-                {% set total_required = 5 %}
+                {% set total_required = 6 %}
                 
-                {# Check first_name #}
-                {% if inquiry.extracted_data.data.get('first_name') and inquiry.extracted_data.data.get('first_name') != 'N/A' and inquiry.extracted_data.data.get('first_name')|length > 0 %}
+                {# Check 1: Home Address #}
+                {% if inquiry.extracted_data.data.get('home_address') and inquiry.extracted_data.data.get('home_address') != 'N/A' and inquiry.extracted_data.data.get('home_address')|length > 0 %}
                     {% set filled_count = filled_count + 1 %}
                 {% endif %}
                 
-                {# Check last_name #}
-                {% if inquiry.extracted_data.data.get('last_name') and inquiry.extracted_data.data.get('last_name') != 'N/A' and inquiry.extracted_data.data.get('last_name')|length > 0 %}
+                {# Check 2: Traveler Details (first name, last name, DOB) #}
+                {% set has_traveler_details = false %}
+                {% set travelers = inquiry.extracted_data.data.get('travelers', []) %}
+                {% if travelers and travelers|length > 0 %}
+                    {% set complete_travelers = 0 %}
+                    {% for traveler in travelers %}
+                        {% if traveler.get('first_name') and traveler.get('last_name') and traveler.get('date_of_birth') %}
+                            {% set complete_travelers = complete_travelers + 1 %}
+                        {% endif %}
+                    {% endfor %}
+                    {% if complete_travelers == travelers|length %}
+                        {% set has_traveler_details = true %}
+                    {% endif %}
+                {% else %}
+                    {# Fallback to basic first_name/last_name/DOB if no travelers array #}
+                    {% if inquiry.extracted_data.data.get('first_name') and inquiry.extracted_data.data.get('last_name') and inquiry.extracted_data.data.get('date_of_birth') %}
+                        {% set has_traveler_details = true %}
+                    {% endif %}
+                {% endif %}
+                {% if has_traveler_details %}
                     {% set filled_count = filled_count + 1 %}
                 {% endif %}
                 
-                {# Check travel_start_date #}
-                {% if inquiry.extracted_data.data.get('travel_start_date') and inquiry.extracted_data.data.get('travel_start_date') != 'N/A' and inquiry.extracted_data.data.get('travel_start_date')|length > 0 %}
+                {# Check 3: Trip Dates #}
+                {% if inquiry.extracted_data.data.get('travel_start_date') and inquiry.extracted_data.data.get('travel_start_date') != 'N/A' and inquiry.extracted_data.data.get('travel_end_date') and inquiry.extracted_data.data.get('travel_end_date') != 'N/A' %}
                     {% set filled_count = filled_count + 1 %}
                 {% endif %}
                 
-                {# Check travel_end_date #}
-                {% if inquiry.extracted_data.data.get('travel_end_date') and inquiry.extracted_data.data.get('travel_end_date') != 'N/A' and inquiry.extracted_data.data.get('travel_end_date')|length > 0 %}
+                {# Check 4: Destination #}
+                {% if inquiry.extracted_data.data.get('trip_destination') and inquiry.extracted_data.data.get('trip_destination') != 'N/A' and inquiry.extracted_data.data.get('trip_destination')|length > 0 and inquiry.extracted_data.data.get('trip_destination')|lower not in ['none', 'not specified'] %}
                     {% set filled_count = filled_count + 1 %}
                 {% endif %}
                 
-                {# Check trip_destination #}
-                {% if inquiry.extracted_data.data.get('trip_destination') and inquiry.extracted_data.data.get('trip_destination') != 'N/A' and inquiry.extracted_data.data.get('trip_destination')|length > 0 and inquiry.extracted_data.data.get('trip_destination')|lower != 'none' and inquiry.extracted_data.data.get('trip_destination')|lower != 'not specified' %}
+                {# Check 5: First Payment Date #}
+                {% if inquiry.extracted_data.data.get('initial_trip_deposit_date') and inquiry.extracted_data.data.get('initial_trip_deposit_date') != 'N/A' and inquiry.extracted_data.data.get('initial_trip_deposit_date')|length > 0 %}
+                    {% set filled_count = filled_count + 1 %}
+                {% endif %}
+                
+                {# Check 6: Total Trip Cost #}
+                {% if inquiry.extracted_data.data.get('trip_cost') and inquiry.extracted_data.data.get('trip_cost') != 'N/A' and inquiry.extracted_data.data.get('trip_cost')|string|length > 0 and inquiry.extracted_data.data.get('trip_cost')|string != '0' %}
                     {% set filled_count = filled_count + 1 %}
                 {% endif %}
                 
@@ -501,20 +659,23 @@
                     <small class="text-warning">
                         <i class="fas fa-exclamation-triangle me-1"></i>
                         {% set missing_fields = [] %}
-                        {% if not (inquiry.extracted_data.data.get('first_name') and inquiry.extracted_data.data.get('first_name') != 'N/A' and inquiry.extracted_data.data.get('first_name')|length > 0) %}
-                            {% set _ = missing_fields.append('First Name') %}
+                        {% if not (inquiry.extracted_data.data.get('home_address') and inquiry.extracted_data.data.get('home_address') != 'N/A' and inquiry.extracted_data.data.get('home_address')|length > 0) %}
+                            {% set _ = missing_fields.append('Home Address') %}
                         {% endif %}
-                        {% if not (inquiry.extracted_data.data.get('last_name') and inquiry.extracted_data.data.get('last_name') != 'N/A' and inquiry.extracted_data.data.get('last_name')|length > 0) %}
-                            {% set _ = missing_fields.append('Last Name') %}
+                        {% if not has_traveler_details %}
+                            {% set _ = missing_fields.append('Traveler Names & DOB') %}
                         {% endif %}
-                        {% if not (inquiry.extracted_data.data.get('travel_start_date') and inquiry.extracted_data.data.get('travel_start_date') != 'N/A' and inquiry.extracted_data.data.get('travel_start_date')|length > 0) %}
-                            {% set _ = missing_fields.append('Start Date') %}
-                        {% endif %}
-                        {% if not (inquiry.extracted_data.data.get('travel_end_date') and inquiry.extracted_data.data.get('travel_end_date') != 'N/A' and inquiry.extracted_data.data.get('travel_end_date')|length > 0) %}
-                            {% set _ = missing_fields.append('End Date') %}
+                        {% if not (inquiry.extracted_data.data.get('travel_start_date') and inquiry.extracted_data.data.get('travel_start_date') != 'N/A' and inquiry.extracted_data.data.get('travel_end_date') and inquiry.extracted_data.data.get('travel_end_date') != 'N/A') %}
+                            {% set _ = missing_fields.append('Trip Dates') %}
                         {% endif %}
                         {% if not (inquiry.extracted_data.data.get('trip_destination') and inquiry.extracted_data.data.get('trip_destination') != 'N/A' and inquiry.extracted_data.data.get('trip_destination')|length > 0 and inquiry.extracted_data.data.get('trip_destination')|lower not in ['none', 'not specified']) %}
                             {% set _ = missing_fields.append('Destination') %}
+                        {% endif %}
+                        {% if not (inquiry.extracted_data.data.get('initial_trip_deposit_date') and inquiry.extracted_data.data.get('initial_trip_deposit_date') != 'N/A' and inquiry.extracted_data.data.get('initial_trip_deposit_date')|length > 0) %}
+                            {% set _ = missing_fields.append('First Payment Date') %}
+                        {% endif %}
+                        {% if not (inquiry.extracted_data.data.get('trip_cost') and inquiry.extracted_data.data.get('trip_cost') != 'N/A' and inquiry.extracted_data.data.get('trip_cost')|string|length > 0 and inquiry.extracted_data.data.get('trip_cost')|string != '0') %}
+                            {% set _ = missing_fields.append('Total Trip Cost') %}
                         {% endif %}
                         Missing: {{ missing_fields|join(', ') }}
                     </small>

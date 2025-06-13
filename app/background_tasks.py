@@ -107,7 +107,7 @@ def handle_process_single_email(task_payload):
                 logging.info(f"{log_prefix} Skipping attachments fetch (performance mode enabled)")
                 attachments_list = []
             else:
-                attachments_list = ms_fetch_attachments_list(email_graph_id)
+            attachments_list = ms_fetch_attachments_list(email_graph_id)
 
         except Exception as fetch_extract_err:
             logging.error(f"{log_prefix} Error during fetch/extraction: {fetch_extract_err}", exc_info=True)
